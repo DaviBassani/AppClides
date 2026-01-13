@@ -161,7 +161,11 @@ const App: React.FC = () => {
         </main>
       </div>
 
-      <Chat />
+      <Chat 
+        activeWorkspace={activeWorkspace}
+        setPoints={handleSetPoints}
+        setShapes={handleSetShapes}
+      />
     </div>
   );
 };
