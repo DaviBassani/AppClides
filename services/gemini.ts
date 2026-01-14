@@ -3,13 +3,18 @@ import { GeometricShape, Point, Workspace } from "../types";
 
 let client: GoogleGenAI | null = null;
 
-// Initialize client only if key is available
+// Initialize client safely checking for process.env
 try {
-    if (process.env.API_KEY) {
-        client = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // We access process.env.API_KEY safely. 
+    // In some browser build setups, 'process' might not be defined globally.
+    // This try-catch block prevents the app from crashing with a ReferenceError.
+    const apiKey = process.env.API_KEY;
+    
+    if (apiKey) {
+        client = new GoogleGenAI({ apiKey });
     }
 } catch (e) {
-    console.error("Failed to initialize Gemini client", e);
+    console.warn("API Key not found or process not defined. AI features disabled.");
 }
 
 // --- Tool Definitions ---
@@ -65,7 +70,7 @@ export interface GeminiResponse {
 
 export const askEuclides = async (prompt: string, currentWorkspace: Workspace): Promise<GeminiResponse> => {
     if (!client) {
-        return { text: "A chave de API não foi configurada." };
+        return { text: "A chave de API não foi configurada. Por favor, adicione a variável de ambiente API_KEY na Vercel." };
     }
 
     // Contextualize the AI with the current board state
