@@ -33,7 +33,7 @@ const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, isOp
 
   useEffect(() => {
     if (isOpen) {
-      scrollToBottom();
+      setTimeout(scrollToBottom, 100); // Small delay for mobile rendering
     }
   }, [messages, isOpen]);
 
@@ -122,12 +122,17 @@ const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, isOp
 
   return (
     <div className={clsx(
-      "fixed bottom-6 right-24 z-20 transition-all duration-300 flex flex-col shadow-2xl rounded-2xl border border-slate-200 bg-white w-96 h-[600px]",
-      isOpen ? "translate-y-0 opacity-100 pointer-events-auto" : "translate-y-8 opacity-0 pointer-events-none"
+      "fixed z-30 transition-transform duration-300 flex flex-col bg-white shadow-2xl border-slate-200",
+      // Desktop Styles
+      "md:bottom-6 md:right-24 md:w-96 md:h-[600px] md:rounded-2xl md:border",
+      // Mobile Styles (Bottom Sheet)
+      "w-full h-[60vh] bottom-0 rounded-t-2xl",
+      isOpen ? "translate-y-0" : "translate-y-[120%]"
     )}>
       {/* Header */}
       <div 
-        className="bg-indigo-900 text-white p-4 flex items-center justify-between rounded-t-2xl cursor-default"
+        className="bg-indigo-900 text-white p-4 flex items-center justify-between rounded-t-2xl cursor-default shrink-0"
+        onClick={() => { if(window.innerWidth < 768) onClose() }} // Click header to close on mobile
       >
         <div className="flex items-center gap-2">
           <Sparkles size={20} className="text-amber-200" />
@@ -137,7 +142,7 @@ const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, isOp
           </div>
         </div>
         <button 
-          onClick={onClose}
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
           className="hover:bg-indigo-800 p-1 rounded-full transition-colors"
         >
           <ChevronDown size={20} />
@@ -145,12 +150,12 @@ const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, isOp
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 overscroll-contain">
         {messages.map((msg, idx) => (
           <div 
             key={idx} 
             className={clsx(
-              "max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed shadow-sm",
+              "max-w-[90%] p-3 rounded-2xl text-sm leading-relaxed shadow-sm",
               msg.role === 'user' 
                 ? "ml-auto bg-indigo-600 text-white rounded-br-none" 
                 : "mr-auto bg-white text-slate-800 border border-slate-200 rounded-bl-none font-serif"
@@ -170,21 +175,21 @@ const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, isOp
       </div>
 
       {/* Input */}
-      <div className="p-3 bg-white border-t border-slate-100 flex gap-2">
+      <div className="p-3 bg-white border-t border-slate-100 flex gap-2 shrink-0 pb-safe">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           placeholder="Pergunte ao mestre..."
-          className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-900 focus:outline-none placeholder:text-slate-400"
+          className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-900 focus:outline-none placeholder:text-slate-400"
         />
         <button 
           onClick={handleSend}
           disabled={!input.trim() || isLoading}
-          className="bg-indigo-900 hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-xl transition-colors flex items-center justify-center w-10 h-10"
+          className="bg-indigo-900 hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-xl transition-colors flex items-center justify-center w-12 h-12"
         >
-          <Send size={18} />
+          <Send size={20} />
         </button>
       </div>
     </div>

@@ -113,7 +113,7 @@ const App: React.FC = () => {
   }, [undo, redo]); 
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-slate-50 relative overflow-hidden font-sans">
+    <div className="h-screen w-screen flex flex-col bg-slate-50 relative overflow-hidden font-sans touch-none">
       
       {/* Tabs Bar */}
       <TabsBar 
@@ -136,54 +136,49 @@ const App: React.FC = () => {
           canRedo={canRedo}
         />
         
-        {/* Right Toolbar */}
-        <div className="absolute bottom-6 right-6 flex flex-col gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10">
+        {/* Right Toolbar - Adjusted position for Mobile */}
+        <div className="absolute bottom-20 md:bottom-6 right-4 md:right-6 flex flex-col gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10 transition-all">
            <button 
              onClick={() => setSnapToGrid(!snapToGrid)} 
              className={clsx(
-               "p-2 rounded-lg transition-colors",
+               "p-2.5 md:p-2 rounded-lg transition-colors active:scale-95",
                snapToGrid ? "text-amber-600 bg-amber-50" : "text-slate-600 hover:bg-slate-100"
              )} 
-             title="Ativar Imã (Grade + Interseções)"
            >
               <Magnet size={20} />
            </button>
            <button 
              onClick={() => setShowGrid(!showGrid)} 
              className={clsx(
-               "p-2 rounded-lg transition-colors",
+               "p-2.5 md:p-2 rounded-lg transition-colors active:scale-95",
                showGrid ? "text-blue-600 bg-blue-50" : "text-slate-600 hover:bg-slate-100"
              )} 
-             title="Alternar Grade"
            >
               <Grid3x3 size={20} />
            </button>
            <div className="h-px bg-slate-200 mx-1 my-0.5" />
-           <button onClick={handleZoomIn} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Zoom In">
+           <button onClick={handleZoomIn} className="p-2.5 md:p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors active:scale-95">
               <ZoomIn size={20} />
            </button>
-           <button onClick={handleZoomOut} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Zoom Out">
+           <button onClick={handleZoomOut} className="p-2.5 md:p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors active:scale-95">
               <ZoomOut size={20} />
            </button>
-           <button onClick={handleResetView} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Reset View">
+           <button onClick={handleResetView} className="p-2.5 md:p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors active:scale-95">
               <Maximize size={20} />
            </button>
            <div className="h-px bg-slate-200 mx-1 my-0.5" />
            <button 
              onClick={() => setIsChatOpen(!isChatOpen)}
              className={clsx(
-               "p-2 rounded-lg transition-all",
+               "p-2.5 md:p-2 rounded-lg transition-all active:scale-95",
                isChatOpen ? "bg-indigo-600 text-white shadow-md" : "text-indigo-600 hover:bg-indigo-50"
              )}
-             title="O Geômetra"
            >
               <MessageSquare size={20} />
            </button>
         </div>
 
-        <main className="absolute inset-0">
-          {/* Key prop ensures Canvas remounts/resets view state when switching tabs */}
-          {/* Actually we might want to preserve view state per workspace, but keeping it simple for now (global view) or let it reset */}
+        <main className="absolute inset-0 z-0">
           <Canvas 
             key={activeWorkspace.id} 
             tool={selectedTool}
