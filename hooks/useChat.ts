@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { askEuclides, GeminiResponse } from '../services/gemini';
 import { Workspace, Point, GeometricShape } from '../types';
 import { generateId } from '../utils/geometry';

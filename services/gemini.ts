@@ -4,18 +4,28 @@ import { Language } from "../utils/i18n";
 
 let client: GoogleGenAI | null = null;
 
-// Initialize client safely checking for process.env
-try {
-    // We access process.env.API_KEY safely. 
-    // In some browser build setups, 'process' might not be defined globally.
-    // This try-catch block prevents the app from crashing with a ReferenceError.
-    const apiKey = process.env.API_KEY;
-    
-    if (apiKey) {
-        client = new GoogleGenAI({ apiKey });
-    }
-} catch (e) {
-    console.warn("API Key not found or process not defined. AI features disabled.");
+// Helper to retrieve API Key from various environments (Node, Vite, etc.)
+const getApiKey = (): string | undefined => {
+    // 1. Try standard process.env (Node/Webpack/Polyfilled)
+    try {
+        if (process.env.API_KEY) return process.env.API_KEY;
+    } catch (e) {}
+
+    // 2. Try Vite environment (Standard for Vercel + React)
+    try {
+        // @ts-ignore - import.meta is valid in ES modules but TS might complain depending on config
+        if (import.meta.env?.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
+    } catch (e) {}
+
+    return undefined;
+};
+
+const apiKey = getApiKey();
+
+if (apiKey) {
+    client = new GoogleGenAI({ apiKey });
+} else {
+    console.warn("API Key not found in process.env.API_KEY or VITE_API_KEY. AI features disabled.");
 }
 
 // --- Tool Definitions ---

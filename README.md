@@ -11,7 +11,7 @@
 [![Gemini API](https://img.shields.io/badge/AI-Gemini_Flash-8E75B2?logo=google&logoColor=white)](https://ai.google.dev/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/bassani)
 
-[Live Demo](https://euclides-web.vercel.app/) • [Technical Documentation (Architecture)](./ARCHITECTURE.md) • [Report Bug](https://github.com/DaviBassani/AppClides/issues)
+[Live Demo](https://euclides-web.vercel.app/) • [Technical Documentation (Architecture)](./ARCHITECTURE.md) • [Report Bug](https://github.com/seu-usuario/euclides-web/issues)
 
 </div>
 
@@ -72,7 +72,7 @@ Follow these steps to run the project locally.
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/DaviBassani/AppClides
+    git clone https://github.com/seu-usuario/euclides-web.git
     cd euclides-web
     ```
 

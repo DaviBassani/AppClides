@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { ToolType, Point, GeometricShape, ShapeType } from '../types';
 import { generateId, findNearestPoint, getAllIntersections } from '../utils/geometry';
 import { SNAP_DISTANCE } from '../constants';

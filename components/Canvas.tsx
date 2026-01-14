@@ -108,7 +108,7 @@ const Canvas: React.FC<CanvasProps> = ({
             )}
 
             {/* Render Points */}
-            {Object.values(points).map(p => (
+            {Object.values(points).map((p: Point) => (
                 <PointRenderer
                     key={p.id}
                     point={p}
