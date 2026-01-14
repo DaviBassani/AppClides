@@ -37,6 +37,10 @@ export const useCanvasInteraction = ({
   
   // Interaction State
   const [cursor, setCursor] = useState({ x: 0, y: 0 }); 
+  
+  // Screen cursor for Loupe (null if not touching)
+  const [touchPos, setTouchPos] = useState<{x: number, y: number} | null>(null);
+
   const [draftStartId, setDraftStartId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -315,11 +319,15 @@ export const useCanvasInteraction = ({
       touchRef.current.center = { x: (e.touches[0].clientX + e.touches[1].clientX) / 2, y: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
       setDraftStartId(null);
       setDraggingId(null);
+      setTouchPos(null);
     } else if (e.touches.length === 1) {
       const t = e.touches[0];
       const startX = t.clientX;
       const startY = t.clientY;
       
+      // Update Touch Pos for Loupe
+      setTouchPos({ x: startX, y: startY });
+
       // Check if touching background or an object
       const { snappedId, shapeId } = getEffectiveCoordinates(startX, startY);
       const isHittingObject = snappedId || shapeId;
@@ -330,6 +338,8 @@ export const useCanvasInteraction = ({
          touchRef.current.startPos = { x: startX, y: startY };
          setLastPanPos({ x: startX, y: startY });
          setIsPanning(true);
+         // Don't show loupe for panning
+         setTouchPos(null);
          return;
       }
 
@@ -369,6 +379,7 @@ export const useCanvasInteraction = ({
 
       touchRef.current.dist = newDist;
       touchRef.current.center = newCenter;
+      setTouchPos(null); // No loupe on gesture
 
     } else if (touchRef.current.mode === 'panning' && e.touches.length === 1) {
       const t = e.touches[0];
@@ -377,9 +388,11 @@ export const useCanvasInteraction = ({
       
       setView(v => ({ ...v, x: v.x + dx, y: v.y + dy }));
       setLastPanPos({ x: t.clientX, y: t.clientY });
+      setTouchPos(null); // No loupe on panning
       
     } else if (touchRef.current.mode === 'drawing' && e.touches.length === 1) {
       const t = e.touches[0];
+      setTouchPos({ x: t.clientX, y: t.clientY }); // Update Loupe
       handleMoveAction(t.clientX, t.clientY);
     }
   };
@@ -390,8 +403,7 @@ export const useCanvasInteraction = ({
         if (t) finalizeDraft(t.clientX, t.clientY);
     }
     
-    // Tap to deselect logic on mobile:
-    // If we were panning but didn't move much (a tap), clear selection.
+    // Tap to deselect logic on mobile
     if (touchRef.current.mode === 'panning' && tool === ToolType.SELECT && touchRef.current.startPos) {
         const t = e.changedTouches[0];
         if (t) {
@@ -406,6 +418,7 @@ export const useCanvasInteraction = ({
     touchRef.current.startPos = null;
     setDraggingId(null);
     setIsPanning(false);
+    setTouchPos(null); // Hide Loupe
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -435,6 +448,7 @@ export const useCanvasInteraction = ({
     handleWheel,
     // State exposed for rendering
     cursor,
+    touchPos, // Export touch position
     draftStartId,
     draggingId,
     hoveredId,

@@ -6,6 +6,7 @@ import Grid from './canvas/Grid';
 import { ShapeRenderer, GhostShapeRenderer } from './canvas/ShapeRenderer';
 import PointRenderer from './canvas/PointRenderer';
 import StyleMenu from './StyleMenu';
+import Loupe from './canvas/Loupe';
 import { Language, t } from '../utils/i18n';
 
 interface CanvasProps {
@@ -45,7 +46,7 @@ const Canvas: React.FC<CanvasProps> = ({
     handleTouchStart, handleTouchMove, handleTouchEnd,
     handleWheel,
     cursor, draftStartId, draggingId, hoveredId, hoveredIntersection, isPanning,
-    // selectedIds and setSelectedIds are now passed from props, so the hook just uses them
+    touchPos, // Get touch position for Loupe
   } = useCanvasInteraction({
     tool, points, shapes, setPoints, setShapes, view, setView, snapToGrid, containerRef,
     // Pass external state to hook (hook needs update to accept these)
@@ -159,6 +160,19 @@ const Canvas: React.FC<CanvasProps> = ({
         </g>
       </svg>
       
+      {/* Loupe for Mobile Precision */}
+      {touchPos && (
+        <Loupe 
+            screenX={touchPos.x} 
+            screenY={touchPos.y} 
+            view={view}
+            points={points}
+            shapes={shapes}
+            showGrid={showGrid}
+            selectedIds={selectedIds}
+        />
+      )}
+
       {/* Style Menu Popup */}
       <StyleMenu selectedCount={selectedIds.length} onUpdateColor={handleUpdateColor} />
 
