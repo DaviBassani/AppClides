@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { ToolType, Point, GeometricShape, ShapeType } from '../types';
-import { generateId, findNearestPoint, getAllIntersections } from '../utils/geometry';
+import { generateId, findNearestPoint, getAllIntersections, getNearestPointOnShape } from '../utils/geometry';
 import { SNAP_DISTANCE } from '../constants';
 
 interface UseCanvasInteractionProps {
@@ -91,25 +91,44 @@ export const useCanvasInteraction = ({
       return { x: p.x, y: p.y, snappedId: nearestPointId, isIntersection: false };
     }
 
-    // Priority 2: Snap to Intersections
-    if (snapToGrid) {
-      let nearestInt: {x: number, y: number} | null = null;
-      let minIntDist = effectiveSnapDistance;
+    // Priority 2: Snap to Intersections (higher priority than shapes)
+    let nearestInt: {x: number, y: number} | null = null;
+    let minIntDist = effectiveSnapDistance;
 
-      for (const int of intersections) {
-        const d = Math.sqrt(Math.pow(x - int.x, 2) + Math.pow(y - int.y, 2));
-        if (d < minIntDist) {
-          minIntDist = d;
-          nearestInt = int;
-        }
-      }
-
-      if (nearestInt) {
-        return { x: nearestInt.x, y: nearestInt.y, snappedId: null, isIntersection: true };
+    for (const int of intersections) {
+      const d = Math.sqrt(Math.pow(x - int.x, 2) + Math.pow(y - int.y, 2));
+      if (d < minIntDist) {
+        minIntDist = d;
+        nearestInt = int;
       }
     }
 
-    // Priority 3: Snap to Grid
+    if (nearestInt) {
+      return { x: nearestInt.x, y: nearestInt.y, snappedId: null, isIntersection: true };
+    }
+
+    // Priority 3: Snap to Shapes (Segments, Lines, Circles)
+    let nearestShapePoint: {x: number, y: number} | null = null;
+    let minShapeDist = effectiveSnapDistance;
+
+    for (const shape of shapes) {
+        const proj = getNearestPointOnShape(x, y, shape, points, effectiveSnapDistance);
+        if (proj) {
+            const d = Math.sqrt(Math.pow(x - proj.x, 2) + Math.pow(y - proj.y, 2));
+            if (d < minShapeDist) {
+                minShapeDist = d;
+                nearestShapePoint = proj;
+            }
+        }
+    }
+
+    if (nearestShapePoint) {
+         // We don't return snappedId or isIntersection here, just coordinates.
+         // In a future update, we could return a `snappedShapeId` to highlight the line.
+         return { x: nearestShapePoint.x, y: nearestShapePoint.y, snappedId: null, isIntersection: false };
+    }
+
+    // Priority 4: Snap to Grid
     if (snapToGrid) {
       const gridX = Math.round(x / GRID_SIZE) * GRID_SIZE;
       const gridY = Math.round(y / GRID_SIZE) * GRID_SIZE;

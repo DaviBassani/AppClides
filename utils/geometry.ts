@@ -51,9 +51,73 @@ export const getLineEnds = (p1: { x: number; y: number }, p2: { x: number; y: nu
   return { x1, y1, x2, y2 };
 };
 
-// --- Intersection Logic ---
+// --- Projection Logic (Snap to Shape) ---
 
 interface Point2D { x: number; y: number; }
+
+const projectOnLine = (p: Point2D, a: Point2D, b: Point2D, clamp: boolean): Point2D => {
+    const atob = { x: b.x - a.x, y: b.y - a.y };
+    const atop = { x: p.x - a.x, y: p.y - a.y };
+    const lenSq = atob.x * atob.x + atob.y * atob.y;
+    
+    if (lenSq === 0) return a;
+
+    let dot = atop.x * atob.x + atop.y * atob.y;
+    let t = dot / lenSq;
+
+    if (clamp) {
+        t = Math.max(0, Math.min(1, t));
+    }
+
+    return {
+        x: a.x + atob.x * t,
+        y: a.y + atob.y * t
+    };
+};
+
+const projectOnCircle = (p: Point2D, center: Point2D, radiusPoint: Point2D): Point2D => {
+    const r = distance(center, radiusPoint);
+    const dx = p.x - center.x;
+    const dy = p.y - center.y;
+    const currentDist = Math.sqrt(dx * dx + dy * dy);
+
+    if (currentDist === 0) return { x: center.x + r, y: center.y }; // Degenerate case, return arbitrary point
+
+    const scale = r / currentDist;
+    return {
+        x: center.x + dx * scale,
+        y: center.y + dy * scale
+    };
+};
+
+export const getNearestPointOnShape = (
+    x: number, 
+    y: number, 
+    shape: GeometricShape, 
+    points: Record<string, Point>, 
+    threshold: number
+): Point2D | null => {
+    const p1 = points[shape.p1];
+    const p2 = points[shape.p2];
+    if (!p1 || !p2) return null;
+
+    let proj: Point2D;
+
+    if (shape.type === 'segment') {
+        proj = projectOnLine({ x, y }, p1, p2, true);
+    } else if (shape.type === 'line') {
+        proj = projectOnLine({ x, y }, p1, p2, false);
+    } else if (shape.type === 'circle') {
+        proj = projectOnCircle({ x, y }, p1, p2);
+    } else {
+        return null;
+    }
+
+    const d = distance({ x, y }, proj);
+    return d <= threshold ? proj : null;
+};
+
+// --- Intersection Logic ---
 
 const onSegment = (p: Point2D, a: Point2D, b: Point2D): boolean => {
   const buffer = 0.001;
