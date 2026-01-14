@@ -5,6 +5,7 @@ import { useCanvasInteraction } from '../hooks/useCanvasInteraction';
 import Grid from './canvas/Grid';
 import { ShapeRenderer, GhostShapeRenderer } from './canvas/ShapeRenderer';
 import PointRenderer from './canvas/PointRenderer';
+import StyleMenu from './StyleMenu';
 import { Language, t } from '../utils/i18n';
 
 interface CanvasProps {
@@ -18,6 +19,9 @@ interface CanvasProps {
   showGrid: boolean;
   snapToGrid: boolean;
   lang: Language;
+  // New props for lifted selection state
+  selectedIds: string[];
+  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
 const Canvas: React.FC<CanvasProps> = ({ 
@@ -30,7 +34,9 @@ const Canvas: React.FC<CanvasProps> = ({
   setView,
   showGrid,
   snapToGrid,
-  lang
+  lang,
+  selectedIds,
+  setSelectedIds
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -38,10 +44,24 @@ const Canvas: React.FC<CanvasProps> = ({
     handleMouseDown, handleMouseMove, handleMouseUp,
     handleTouchStart, handleTouchMove, handleTouchEnd,
     handleWheel,
-    cursor, draftStartId, draggingId, hoveredId, hoveredIntersection, isPanning
+    cursor, draftStartId, draggingId, hoveredId, hoveredIntersection, isPanning,
+    // selectedIds and setSelectedIds are now passed from props, so the hook just uses them
   } = useCanvasInteraction({
-    tool, points, shapes, setPoints, setShapes, view, setView, snapToGrid, containerRef
+    tool, points, shapes, setPoints, setShapes, view, setView, snapToGrid, containerRef,
+    // Pass external state to hook (hook needs update to accept these)
+    externalSelection: { selectedIds, setSelectedIds }
   });
+
+  const handleUpdateColor = (color: string) => {
+      setPoints(prev => {
+          const next = { ...prev };
+          Object.keys(next).forEach(id => {
+              if (selectedIds.includes(id)) next[id] = { ...next[id], color };
+          });
+          return next;
+      });
+      setShapes(prev => prev.map(s => selectedIds.includes(s.id) ? { ...s, color } : s));
+  };
 
   // Effective visual sizes
   const visualScale = 1 / view.k;
@@ -69,11 +89,17 @@ const Canvas: React.FC<CanvasProps> = ({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
+      // Click on background to clear selection if not dragging or panning
+      onClick={(e) => {
+         if (!draggingId && !isPanning && tool === ToolType.SELECT && selectedIds.length > 0) {
+            // Logic handled in handleStartAction mostly, but this catches edge cases
+         }
+      }}
     >
       <svg className="w-full h-full pointer-events-none">
         
         <g transform={`translate(${view.x}, ${view.y}) scale(${view.k})`}>
-            {/* Grid must be inside the transform to move/scale with the world */}
+            {/* Grid */}
             <Grid size={20} show={showGrid} axisWidth={axisWidth} visualScale={visualScale} />
 
             {/* Render Existing Shapes */}
@@ -81,10 +107,19 @@ const Canvas: React.FC<CanvasProps> = ({
                 const p1 = points[shape.p1];
                 const p2 = points[shape.p2];
                 if (!p1 || !p2) return null;
-                return <ShapeRenderer key={shape.id} shape={shape} p1={p1} p2={p2} strokeWidth={strokeWidth} />;
+                return (
+                    <ShapeRenderer 
+                        key={shape.id} 
+                        shape={shape} 
+                        p1={p1} 
+                        p2={p2} 
+                        strokeWidth={strokeWidth} 
+                        isSelected={selectedIds.includes(shape.id)}
+                    />
+                );
             })}
             
-            {/* Render Ghost Shape (Drafting) */}
+            {/* Render Ghost Shape */}
             {draftStartId && points[draftStartId] && (
                 <GhostShapeRenderer 
                     type={tool.toLowerCase() as any}
@@ -115,6 +150,7 @@ const Canvas: React.FC<CanvasProps> = ({
                     radius={pointRadius}
                     hoverRadius={pointHoverRadius}
                     isActive={hoveredId === p.id || draftStartId === p.id || draggingId === p.id}
+                    isSelected={selectedIds.includes(p.id)}
                     isDraftStart={draftStartId === p.id}
                     strokeWidth={strokeWidth}
                     visualScale={visualScale}
@@ -122,6 +158,9 @@ const Canvas: React.FC<CanvasProps> = ({
             ))}
         </g>
       </svg>
+      
+      {/* Style Menu Popup */}
+      <StyleMenu selectedCount={selectedIds.length} onUpdateColor={handleUpdateColor} />
 
       <div className="absolute bottom-6 left-6 text-xs text-slate-400 select-none pointer-events-none z-10 hidden md:block">
          <div className="font-medium text-slate-500 mb-1">{t[lang].canvas.scale}: {view.k.toFixed(2)}x</div>
@@ -131,7 +170,10 @@ const Canvas: React.FC<CanvasProps> = ({
          {tool === ToolType.LINE && instructions.LINE}
          {tool === ToolType.CIRCLE && instructions.CIRCLE}
          
-         <div className="mt-2 pt-2 border-t border-slate-200/50 flex flex-col gap-1 pointer-events-auto opacity-70 hover:opacity-100 transition-opacity">
+         <div 
+             className="mt-2 pt-2 border-t border-slate-200/50 flex flex-col gap-1 pointer-events-auto opacity-70 hover:opacity-100 transition-opacity"
+             onMouseDown={(e) => e.stopPropagation()}
+         >
             <span className="font-medium">{t[lang].canvas.version}</span>
             <a 
               href="https://buymeacoffee.com/bassani" 

@@ -12,6 +12,7 @@ export interface Point {
   x: number;
   y: number;
   label?: string;
+  color?: string;
 }
 
 export type ShapeType = 'segment' | 'line' | 'circle';
@@ -21,6 +22,7 @@ export interface GeometricShape {
   type: ShapeType;
   p1: string; // ID of first defining point (center for circle)
   p2: string; // ID of second defining point (radius point for circle)
+  color?: string;
 }
 
 export interface Workspace {

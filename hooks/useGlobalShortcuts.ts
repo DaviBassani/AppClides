@@ -5,9 +5,10 @@ interface UseGlobalShortcutsProps {
     onUndo: () => void;
     onRedo: () => void;
     onSelectTool: (tool: ToolType) => void;
+    onDelete: () => void;
 }
 
-export const useGlobalShortcuts = ({ onUndo, onRedo, onSelectTool }: UseGlobalShortcutsProps) => {
+export const useGlobalShortcuts = ({ onUndo, onRedo, onSelectTool, onDelete }: UseGlobalShortcutsProps) => {
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
           const target = e.target as HTMLElement;
@@ -28,16 +29,24 @@ export const useGlobalShortcuts = ({ onUndo, onRedo, onSelectTool }: UseGlobalSh
             onRedo();
             return;
           }
+
+          // Delete Selection
+          if (e.key === 'Delete' || e.key === 'Backspace') {
+              e.preventDefault();
+              onDelete();
+              return;
+          }
+
           switch(e.key.toLowerCase()) {
             case 'p': onSelectTool(ToolType.POINT); break;
             case 's': onSelectTool(ToolType.SEGMENT); break;
             case 'r': onSelectTool(ToolType.LINE); break;
             case 'c': onSelectTool(ToolType.CIRCLE); break;
             case 'escape': onSelectTool(ToolType.SELECT); break;
-            case 'delete': onSelectTool(ToolType.ERASER); break;
+            case 'e': onSelectTool(ToolType.ERASER); break;
           }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-      }, [onUndo, onRedo, onSelectTool]);
+      }, [onUndo, onRedo, onSelectTool, onDelete]);
 };

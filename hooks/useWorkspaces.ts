@@ -200,6 +200,46 @@ export const useWorkspaces = () => {
     }));
   }, [activeWorkspace, saveSnapshot]);
 
+  const deleteSelection = useCallback((selectedIds: string[]) => {
+      if (selectedIds.length === 0) return;
+      const targetId = activeWorkspace.id;
+
+      // Save snapshot
+      saveSnapshot(targetId, activeWorkspace.points, activeWorkspace.shapes);
+
+      setWorkspaces(prev => prev.map(ws => {
+          if (ws.id !== targetId) return ws;
+
+          // Logic:
+          // 1. Identify shapes explicitly selected for deletion.
+          // 2. Identify points explicitly selected for deletion.
+          // 3. Identify shapes connected to those points (cascade delete).
+          
+          let shapesToDelete = new Set<string>();
+          const pointsToDelete = new Set<string>();
+
+          selectedIds.forEach(id => {
+              if (ws.points[id]) pointsToDelete.add(id);
+              // Check if it's a shape ID (optimization: could maintain a map, but array find is fast enough for <100 items)
+              if (ws.shapes.find(s => s.id === id)) shapesToDelete.add(id);
+          });
+
+          // If a point is deleted, all shapes connected to it must be deleted
+          ws.shapes.forEach(s => {
+              if (pointsToDelete.has(s.p1) || pointsToDelete.has(s.p2)) {
+                  shapesToDelete.add(s.id);
+              }
+          });
+
+          const newShapes = ws.shapes.filter(s => !shapesToDelete.has(s.id));
+          
+          const newPoints = { ...ws.points };
+          pointsToDelete.forEach(id => delete newPoints[id]);
+
+          return { ...ws, shapes: newShapes, points: newPoints };
+      }));
+  }, [activeWorkspace, saveSnapshot]);
+
   // --- Workspace Management ---
 
   const addWorkspace = useCallback((defaultName?: string) => {
@@ -243,6 +283,7 @@ export const useWorkspaces = () => {
     updatePoints,
     updateShapes,
     clearActiveWorkspace,
+    deleteSelection,
     undo,
     redo,
     // Use targetId to check history availability

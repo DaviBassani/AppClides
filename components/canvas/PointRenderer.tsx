@@ -7,6 +7,7 @@ interface PointRendererProps {
   radius: number;
   hoverRadius: number;
   isActive: boolean;
+  isSelected: boolean;
   isDraftStart: boolean;
   strokeWidth: number;
   visualScale: number;
@@ -17,6 +18,7 @@ const PointRenderer: React.FC<PointRendererProps> = React.memo(({
   radius, 
   hoverRadius, 
   isActive, 
+  isSelected,
   isDraftStart, 
   strokeWidth, 
   visualScale 
@@ -26,11 +28,23 @@ const PointRenderer: React.FC<PointRendererProps> = React.memo(({
       {/* Transparent hit area for easier touch selection */}
       <circle cx={point.x} cy={point.y} r={Math.max(15, 15 * visualScale)} fill="transparent" />
       
+      {isSelected && (
+         <circle 
+            cx={point.x} 
+            cy={point.y} 
+            r={hoverRadius * 1.5} 
+            fill="transparent" 
+            stroke={COLORS.selection} 
+            strokeWidth={strokeWidth * 1.5}
+            opacity={0.6}
+         />
+      )}
+
       <circle 
         cx={point.x} 
         cy={point.y} 
         r={isActive ? hoverRadius : radius} 
-        fill={isDraftStart ? COLORS.accent : COLORS.point}
+        fill={isDraftStart ? COLORS.accent : (point.color || COLORS.point)}
         stroke="white"
         strokeWidth={strokeWidth}
       />

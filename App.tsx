@@ -28,7 +28,7 @@ const App: React.FC = () => {
   const {
     workspaces, activeWorkspaceId, activeWorkspace, setActiveWorkspaceId,
     addWorkspace, removeWorkspace, renameWorkspace,
-    updatePoints, updateShapes, clearActiveWorkspace,
+    updatePoints, updateShapes, clearActiveWorkspace, deleteSelection,
     undo, redo, canUndo, canRedo
   } = useWorkspaces();
 
@@ -43,56 +43,43 @@ const App: React.FC = () => {
     document.title = lang === 'pt' ? 'Euclides Web - Geometria' : 'Euclides Web - Geometry';
   }, [lang]);
 
-  // Global Shortcuts
-  useGlobalShortcuts({ onUndo: undo, onRedo: redo, onSelectTool: setSelectedTool });
-
-  // --- View Handlers ---
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  
+  // Wrap deleteSelection to pass current selection
+  const handleDelete = () => {
+      deleteSelection(selectedIds);
+      setSelectedIds([]); // Clear selection after delete
+  };
 
   const handleClear = () => {
-    clearActiveWorkspace();
-    setSelectedTool(ToolType.SELECT);
+      clearActiveWorkspace();
+      setSelectedIds([]);
   };
 
-  const handleZoomIn = () => {
-    setView(prev => {
-      const k = Math.min(50, prev.k * 1.2);
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      const worldX = (cx - prev.x) / prev.k;
-      const worldY = (cy - prev.y) / prev.k;
-      return { ...prev, k, x: cx - worldX * k, y: cy - worldY * k };
-    });
-  };
-
-  const handleZoomOut = () => {
-    setView(prev => {
-      const k = Math.max(0.1, prev.k / 1.2);
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      const worldX = (cx - prev.x) / prev.k;
-      const worldY = (cy - prev.y) / prev.k;
-      return { ...prev, k, x: cx - worldX * k, y: cy - worldY * k };
-    });
-  };
-
-  const handleResetView = () => {
-    setView({ x: window.innerWidth / 2, y: window.innerHeight / 2, k: 1 });
-  };
-  
-  // Combine view control props
   const viewControlsProps = {
-    snapToGrid, setSnapToGrid,
-    showGrid, setShowGrid,
-    onZoomIn: handleZoomIn,
-    onZoomOut: handleZoomOut,
-    onResetView: handleResetView,
-    isChatOpen, setIsChatOpen,
-    lang
+      snapToGrid,
+      setSnapToGrid,
+      showGrid,
+      setShowGrid,
+      onZoomIn: () => setView(prev => ({ ...prev, k: Math.min(50, prev.k * 1.2) })),
+      onZoomOut: () => setView(prev => ({ ...prev, k: Math.max(0.1, prev.k / 1.2) })),
+      onResetView: () => setView({ x: window.innerWidth / 2, y: window.innerHeight / 2, k: 1 }),
+      isChatOpen,
+      setIsChatOpen,
+      lang
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-slate-50 relative overflow-hidden font-sans touch-none">
+    <div className="h-[100dvh] w-screen flex flex-col bg-slate-50 relative overflow-hidden font-sans touch-none">
       
+      {/* Global Shortcuts Listener with access to App State */}
+      <GlobalShortcutsHandler 
+         onUndo={undo} 
+         onRedo={redo} 
+         onSelectTool={setSelectedTool} 
+         onDelete={handleDelete}
+      />
+
       <TabsBar 
         workspaces={workspaces}
         activeId={activeWorkspaceId}
@@ -115,13 +102,13 @@ const App: React.FC = () => {
           lang={lang}
         />
         
-        {/* DESKTOP Right Toolbar: Static Column - Moved to BOTTOM Right */}
+        {/* DESKTOP Right Toolbar: Static Column */}
         <div className="hidden md:flex absolute bottom-6 right-6 flex-col items-center gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10">
            <ViewControls {...viewControlsProps} layout="col" />
         </div>
 
         {/* MOBILE Right Toolbar: Collapsible Speed Dial */}
-        <div className="md:hidden absolute bottom-28 right-4 z-20 flex flex-col items-center gap-3 pointer-events-none">
+        <div className="md:hidden absolute bottom-24 right-4 z-20 flex flex-col items-center gap-3 pointer-events-none mb-safe">
             <div className={clsx(
                 "flex flex-col items-center gap-3 transition-all duration-300 origin-bottom pb-2",
                 isMobileMenuOpen 
@@ -141,7 +128,7 @@ const App: React.FC = () => {
             <button 
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 className={clsx(
-                    "pointer-events-auto w-14 h-14 rounded-full shadow-xl transition-all duration-300 active:scale-90 flex items-center justify-center border border-slate-100 p-0",
+                    "pointer-events-auto w-12 h-12 rounded-full shadow-xl transition-all duration-300 active:scale-90 flex items-center justify-center border border-slate-100 p-0",
                     isMobileMenuOpen ? "bg-slate-800 text-white rotate-90" : "bg-white text-slate-700"
                 )}
             >
@@ -162,6 +149,9 @@ const App: React.FC = () => {
             showGrid={showGrid}
             snapToGrid={snapToGrid}
             lang={lang}
+            // Pass selection state down
+            selectedIds={selectedIds}
+            setSelectedIds={setSelectedIds}
           />
         </main>
       </div>
@@ -177,5 +167,17 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+// Extracted to avoid hook rules issues inside conditional returns or loops, 
+// and to clearly separate the key listener from the render logic.
+const GlobalShortcutsHandler: React.FC<{
+    onUndo: () => void;
+    onRedo: () => void;
+    onSelectTool: (t: ToolType) => void;
+    onDelete: () => void;
+}> = (props) => {
+    useGlobalShortcuts(props);
+    return null;
+}
 
 export default App;

@@ -3,9 +3,6 @@ import { GeometricShape, Workspace } from "../types";
 import { Language } from "../utils/i18n";
 
 // --- Client Initialization ---
-// Following specific system instructions to use process.env.API_KEY directly
-// In a real Vite environment, this often requires define: { 'process.env': ... } config
-// or usage of import.meta.env. We will attempt to support both for robustness while adhering to the prompt.
 const getApiKey = () => {
     try {
         // @ts-ignore

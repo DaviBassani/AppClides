@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { ToolType, Point, GeometricShape, ShapeType } from '../types';
-import { generateId, findNearestPoint, getAllIntersections, getNearestPointOnShape } from '../utils/geometry';
+import { generateId, findNearestPoint, getAllIntersections, getNearestPointOnShape, distance } from '../utils/geometry';
 import { SNAP_DISTANCE } from '../constants';
 
 interface UseCanvasInteractionProps {
@@ -13,6 +13,11 @@ interface UseCanvasInteractionProps {
   setView: React.Dispatch<React.SetStateAction<{ x: number; y: number; k: number }>>;
   snapToGrid: boolean;
   containerRef: React.RefObject<HTMLDivElement | null>;
+  // Add external selection control
+  externalSelection?: {
+      selectedIds: string[];
+      setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
+  };
 }
 
 const GRID_SIZE = 20;
@@ -26,7 +31,8 @@ export const useCanvasInteraction = ({
   view,
   setView,
   snapToGrid,
-  containerRef
+  containerRef,
+  externalSelection
 }: UseCanvasInteractionProps) => {
   
   // Interaction State
@@ -36,6 +42,11 @@ export const useCanvasInteraction = ({
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hoveredIntersection, setHoveredIntersection] = useState<{x: number, y: number} | null>(null);
   
+  // Selection State: Use external if available, otherwise internal (fallback)
+  const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
+  const selectedIds = externalSelection ? externalSelection.selectedIds : internalSelectedIds;
+  const setSelectedIds = externalSelection ? externalSelection.setSelectedIds : setInternalSelectedIds;
+  
   // Mouse Panning State
   const [isPanning, setIsPanning] = useState(false);
   const [lastPanPos, setLastPanPos] = useState({ x: 0, y: 0 });
@@ -44,8 +55,9 @@ export const useCanvasInteraction = ({
   const touchRef = useRef<{
     dist: number;
     center: { x: number; y: number };
-    mode: 'none' | 'drawing' | 'gesture';
-  }>({ dist: 0, center: { x: 0, y: 0 }, mode: 'none' });
+    mode: 'none' | 'drawing' | 'gesture' | 'panning';
+    startPos: { x: number; y: number } | null;
+  }>({ dist: 0, center: { x: 0, y: 0 }, mode: 'none', startPos: null });
 
   // Derived Values
   const visualScale = 1 / view.k;
@@ -82,16 +94,18 @@ export const useCanvasInteraction = ({
 
   const getEffectiveCoordinates = (clientX: number, clientY: number, excludePointId: string | null = null) => {
     let { x, y } = toWorld(clientX, clientY);
+    let snappedId: string | null = null;
+    let shapeId: string | null = null;
     
     // Priority 1: Snap to Points
     const nearestPointId = findNearestPoint(x, y, points, excludePointId, effectiveSnapDistance);
     
     if (nearestPointId) {
       const p = points[nearestPointId];
-      return { x: p.x, y: p.y, snappedId: nearestPointId, isIntersection: false };
+      return { x: p.x, y: p.y, snappedId: nearestPointId, shapeId: null, isIntersection: false };
     }
 
-    // Priority 2: Snap to Intersections (higher priority than shapes)
+    // Priority 2: Snap to Intersections
     let nearestInt: {x: number, y: number} | null = null;
     let minIntDist = effectiveSnapDistance;
 
@@ -104,28 +118,28 @@ export const useCanvasInteraction = ({
     }
 
     if (nearestInt) {
-      return { x: nearestInt.x, y: nearestInt.y, snappedId: null, isIntersection: true };
+      return { x: nearestInt.x, y: nearestInt.y, snappedId: null, shapeId: null, isIntersection: true };
     }
 
     // Priority 3: Snap to Shapes (Segments, Lines, Circles)
     let nearestShapePoint: {x: number, y: number} | null = null;
     let minShapeDist = effectiveSnapDistance;
+    let foundShapeId: string | null = null;
 
     for (const shape of shapes) {
         const proj = getNearestPointOnShape(x, y, shape, points, effectiveSnapDistance);
         if (proj) {
-            const d = Math.sqrt(Math.pow(x - proj.x, 2) + Math.pow(y - proj.y, 2));
+            const d = Math.sqrt(Math.pow(x - proj.point.x, 2) + Math.pow(y - proj.point.y, 2));
             if (d < minShapeDist) {
                 minShapeDist = d;
-                nearestShapePoint = proj;
+                nearestShapePoint = proj.point;
+                foundShapeId = proj.shapeId;
             }
         }
     }
 
-    if (nearestShapePoint) {
-         // We don't return snappedId or isIntersection here, just coordinates.
-         // In a future update, we could return a `snappedShapeId` to highlight the line.
-         return { x: nearestShapePoint.x, y: nearestShapePoint.y, snappedId: null, isIntersection: false };
+    if (nearestShapePoint && foundShapeId) {
+         return { x: nearestShapePoint.x, y: nearestShapePoint.y, snappedId: null, shapeId: foundShapeId, isIntersection: false };
     }
 
     // Priority 4: Snap to Grid
@@ -139,20 +153,41 @@ export const useCanvasInteraction = ({
       }
     }
 
-    return { x, y, snappedId: null, isIntersection: false };
+    return { x, y, snappedId: null, shapeId: null, isIntersection: false };
   };
 
   // --- Actions ---
 
-  const handleStartAction = (clientX: number, clientY: number) => {
-    const { x, y, snappedId } = getEffectiveCoordinates(clientX, clientY);
+  const handleStartAction = (clientX: number, clientY: number, isShiftKey: boolean) => {
+    const { x, y, snappedId, shapeId } = getEffectiveCoordinates(clientX, clientY);
 
     if (tool === ToolType.SELECT) {
-      if (snappedId) {
-        setDraggingId(snappedId);
+      // Selection Logic
+      const targetId = snappedId || shapeId;
+      
+      if (targetId) {
+         if (isShiftKey) {
+             // Toggle selection
+             setSelectedIds(prev => prev.includes(targetId) 
+                ? prev.filter(id => id !== targetId) 
+                : [...prev, targetId]
+             );
+         } else {
+             // If clicking an already selected item without shift, don't clear (might be starting a drag)
+             if (!selectedIds.includes(targetId)) {
+                setSelectedIds([targetId]);
+             }
+         }
+         
+         if (snappedId) setDraggingId(snappedId); // Only drag points for now
+      } else {
+         if (!isShiftKey) setSelectedIds([]);
       }
       return;
     }
+
+    // Clear selection when using other tools
+    if (selectedIds.length > 0) setSelectedIds([]);
 
     if (tool === ToolType.ERASER) {
       if (snappedId) {
@@ -162,6 +197,8 @@ export const useCanvasInteraction = ({
           delete next[snappedId];
           return next;
         });
+      } else if (shapeId) {
+         setShapes(prev => prev.filter(s => s.id !== shapeId));
       }
       return;
     }
@@ -205,16 +242,49 @@ export const useCanvasInteraction = ({
     }
   };
 
+  const finalizeDraft = (clientX: number, clientY: number) => {
+      if (!draftStartId) return;
+      const startPoint = points[draftStartId];
+      if (!startPoint) {
+          setDraftStartId(null);
+          return;
+      }
+
+      const { x, y, snappedId } = getEffectiveCoordinates(clientX, clientY, draftStartId);
+      const dist = Math.sqrt(Math.pow(x - startPoint.x, 2) + Math.pow(y - startPoint.y, 2));
+      
+      // Threshold to detect "Drag" vs "Click". 
+      // If user drags more than X pixels (scaled), we assume they want to finish the shape on release.
+      const dragThreshold = 20 * visualScale;
+
+      if (dist > dragThreshold) {
+          const target = getTargetPoint(x, y, snappedId);
+          if (draftStartId !== target.id) {
+              const newShape: GeometricShape = {
+                id: generateId(),
+                type: tool.toLowerCase() as ShapeType,
+                p1: draftStartId,
+                p2: target.id,
+              };
+              setShapes(prev => [...prev, newShape]);
+              setDraftStartId(null);
+          }
+      }
+  };
+
   // --- Event Handlers ---
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 1 || (tool === ToolType.SELECT && !getEffectiveCoordinates(e.clientX, e.clientY).snappedId)) {
-      e.preventDefault();
-      setIsPanning(true);
-      setLastPanPos({ x: e.clientX, y: e.clientY });
-      return;
+    if (e.button === 1 || (tool === ToolType.SELECT && !getEffectiveCoordinates(e.clientX, e.clientY).snappedId && !getEffectiveCoordinates(e.clientX, e.clientY).shapeId)) {
+      if (!e.shiftKey) { 
+          e.preventDefault();
+          setIsPanning(true);
+          setLastPanPos({ x: e.clientX, y: e.clientY });
+          if (!e.shiftKey) setSelectedIds([]);
+          return;
+      }
     }
-    handleStartAction(e.clientX, e.clientY);
+    handleStartAction(e.clientX, e.clientY, e.shiftKey);
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -228,7 +298,12 @@ export const useCanvasInteraction = ({
     handleMoveAction(e.clientX, e.clientY);
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: React.MouseEvent) => {
+    // "Drag-to-Create" logic
+    if (draftStartId && !isPanning && !draggingId && (tool === ToolType.SEGMENT || tool === ToolType.LINE || tool === ToolType.CIRCLE)) {
+        finalizeDraft(e.clientX, e.clientY);
+    }
+
     setDraggingId(null);
     setIsPanning(false);
   };
@@ -241,9 +316,26 @@ export const useCanvasInteraction = ({
       setDraftStartId(null);
       setDraggingId(null);
     } else if (e.touches.length === 1) {
-      touchRef.current.mode = 'drawing';
       const t = e.touches[0];
-      handleStartAction(t.clientX, t.clientY);
+      const startX = t.clientX;
+      const startY = t.clientY;
+      
+      // Check if touching background or an object
+      const { snappedId, shapeId } = getEffectiveCoordinates(startX, startY);
+      const isHittingObject = snappedId || shapeId;
+
+      // Special Case: 1 finger pan in Select Mode if touching background
+      if (tool === ToolType.SELECT && !isHittingObject) {
+         touchRef.current.mode = 'panning';
+         touchRef.current.startPos = { x: startX, y: startY };
+         setLastPanPos({ x: startX, y: startY });
+         setIsPanning(true);
+         return;
+      }
+
+      touchRef.current.mode = 'drawing';
+      touchRef.current.startPos = { x: startX, y: startY };
+      handleStartAction(startX, startY, false);
     }
   };
 
@@ -278,14 +370,40 @@ export const useCanvasInteraction = ({
       touchRef.current.dist = newDist;
       touchRef.current.center = newCenter;
 
+    } else if (touchRef.current.mode === 'panning' && e.touches.length === 1) {
+      const t = e.touches[0];
+      const dx = t.clientX - lastPanPos.x;
+      const dy = t.clientY - lastPanPos.y;
+      
+      setView(v => ({ ...v, x: v.x + dx, y: v.y + dy }));
+      setLastPanPos({ x: t.clientX, y: t.clientY });
+      
     } else if (touchRef.current.mode === 'drawing' && e.touches.length === 1) {
       const t = e.touches[0];
       handleMoveAction(t.clientX, t.clientY);
     }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchRef.current.mode === 'drawing' && draftStartId && !draggingId && (tool === ToolType.SEGMENT || tool === ToolType.LINE || tool === ToolType.CIRCLE)) {
+        const t = e.changedTouches[0];
+        if (t) finalizeDraft(t.clientX, t.clientY);
+    }
+    
+    // Tap to deselect logic on mobile:
+    // If we were panning but didn't move much (a tap), clear selection.
+    if (touchRef.current.mode === 'panning' && tool === ToolType.SELECT && touchRef.current.startPos) {
+        const t = e.changedTouches[0];
+        if (t) {
+            const d = Math.sqrt(Math.pow(t.clientX - touchRef.current.startPos.x, 2) + Math.pow(t.clientY - touchRef.current.startPos.y, 2));
+            if (d < 5) {
+                setSelectedIds([]);
+            }
+        }
+    }
+
     touchRef.current.mode = 'none';
+    touchRef.current.startPos = null;
     setDraggingId(null);
     setIsPanning(false);
   };
@@ -321,6 +439,8 @@ export const useCanvasInteraction = ({
     draggingId,
     hoveredId,
     hoveredIntersection,
-    isPanning
+    isPanning,
+    selectedIds,
+    setSelectedIds
   };
 };

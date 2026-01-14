@@ -42,7 +42,6 @@ export const getLineEnds = (p1: { x: number; y: number }, p2: { x: number; y: nu
   const m = dy / dx;
   const b = p1.y - m * p1.x;
 
-  // Calculate intersection with box (simplified: just make it huge)
   const x1 = -10000;
   const y1 = m * x1 + b;
   const x2 = 10000;
@@ -81,7 +80,7 @@ const projectOnCircle = (p: Point2D, center: Point2D, radiusPoint: Point2D): Poi
     const dy = p.y - center.y;
     const currentDist = Math.sqrt(dx * dx + dy * dy);
 
-    if (currentDist === 0) return { x: center.x + r, y: center.y }; // Degenerate case, return arbitrary point
+    if (currentDist === 0) return { x: center.x + r, y: center.y }; // Degenerate case
 
     const scale = r / currentDist;
     return {
@@ -90,13 +89,14 @@ const projectOnCircle = (p: Point2D, center: Point2D, radiusPoint: Point2D): Poi
     };
 };
 
+// Returns both the point and the shape ID it belongs to
 export const getNearestPointOnShape = (
     x: number, 
     y: number, 
     shape: GeometricShape, 
     points: Record<string, Point>, 
     threshold: number
-): Point2D | null => {
+): { point: Point2D, shapeId: string } | null => {
     const p1 = points[shape.p1];
     const p2 = points[shape.p2];
     if (!p1 || !p2) return null;
@@ -114,7 +114,7 @@ export const getNearestPointOnShape = (
     }
 
     const d = distance({ x, y }, proj);
-    return d <= threshold ? proj : null;
+    return d <= threshold ? { point: proj, shapeId: shape.id } : null;
 };
 
 // --- Intersection Logic ---
@@ -125,7 +125,6 @@ const onSegment = (p: Point2D, a: Point2D, b: Point2D): boolean => {
          p.y >= Math.min(a.y, b.y) - buffer && p.y <= Math.max(a.y, b.y) + buffer;
 };
 
-// Line-Line Intersection (handles segments and infinite lines)
 const getLineIntersection = (
   p1: Point2D, p2: Point2D, type1: 'line' | 'segment',
   p3: Point2D, p4: Point2D, type2: 'line' | 'segment'
@@ -137,28 +136,21 @@ const getLineIntersection = (
   if (denom === 0) return []; // Parallel
 
   const ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denom;
-  const ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denom;
-
-  // Intersection point
   const x = x1 + ua * (x2 - x1);
   const y = y1 + ua * (y2 - y1);
   const p = { x, y };
 
-  // Check bounds if segments
   if (type1 === 'segment' && !onSegment(p, p1, p2)) return [];
   if (type2 === 'segment' && !onSegment(p, p3, p4)) return [];
 
   return [p];
 };
 
-// Line-Circle Intersection
 const getLineCircleIntersection = (
   p1: Point2D, p2: Point2D, type1: 'line' | 'segment',
   cCenter: Point2D, cRadiusPoint: Point2D
 ): Point2D[] => {
   const r = distance(cCenter, cRadiusPoint);
-  
-  // Shift to origin relative to circle center
   const x1 = p1.x - cCenter.x;
   const y1 = p1.y - cCenter.y;
   const x2 = p2.x - cCenter.x;
@@ -178,16 +170,13 @@ const getLineCircleIntersection = (
 
   const solX1 = (D * dy + (dy < 0 ? -1 : 1) * dx * rootDisc) / (dr * dr);
   const solY1 = (-D * dx + Math.abs(dy) * rootDisc) / (dr * dr);
-  
   const solX2 = (D * dy - (dy < 0 ? -1 : 1) * dx * rootDisc) / (dr * dr);
   const solY2 = (-D * dx - Math.abs(dy) * rootDisc) / (dr * dr);
 
-  // Translate back
   const intersect1 = { x: solX1 + cCenter.x, y: solY1 + cCenter.y };
   const intersect2 = { x: solX2 + cCenter.x, y: solY2 + cCenter.y };
 
   if (type1 === 'line' || onSegment(intersect1, p1, p2)) points.push(intersect1);
-  // Avoid duplicates if tangent
   if (discriminant > 0.001) {
     if (type1 === 'line' || onSegment(intersect2, p1, p2)) points.push(intersect2);
   }
@@ -195,7 +184,6 @@ const getLineCircleIntersection = (
   return points;
 };
 
-// Circle-Circle Intersection
 const getCircleCircleIntersection = (
   c1Center: Point2D, c1RadiusPoint: Point2D,
   c2Center: Point2D, c2RadiusPoint: Point2D
@@ -204,7 +192,6 @@ const getCircleCircleIntersection = (
   const r2 = distance(c2Center, c2RadiusPoint);
   const d = distance(c1Center, c2Center);
 
-  // No intersection or coincident
   if (d > r1 + r2 || d < Math.abs(r1 - r2) || d === 0) return [];
 
   const a = (r1 * r1 - r2 * r2 + d * d) / (2 * d);
@@ -236,7 +223,6 @@ export const getAllIntersections = (
     for (let j = i + 1; j < shapes.length; j++) {
       const s1 = shapes[i];
       const s2 = shapes[j];
-      
       const p1 = points[s1.p1];
       const p2 = points[s1.p2];
       const p3 = points[s2.p1];
@@ -255,10 +241,8 @@ export const getAllIntersections = (
       } else if (s1.type === 'circle' && s2.type === 'circle') {
         results = getCircleCircleIntersection(p1, p2, p3, p4);
       }
-
       intersections.push(...results);
     }
   }
-
   return intersections;
 };
