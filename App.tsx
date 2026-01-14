@@ -5,19 +5,22 @@ import Chat from './components/Chat';
 import TabsBar from './components/TabsBar';
 import { ToolType } from './types';
 import { useWorkspaces } from './hooks/useWorkspaces';
-import { ZoomIn, ZoomOut, Maximize, Grid3x3, Magnet, MessageSquare } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize, Grid3x3, Magnet, MessageSquare, EllipsisVertical, X } from 'lucide-react';
 import clsx from 'clsx';
 
 const App: React.FC = () => {
   const [selectedTool, setSelectedTool] = useState<ToolType>(ToolType.SELECT);
   
-  // Canvas View State lifted to App
+  // Canvas View State
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
   const [showGrid, setShowGrid] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  
+  // Mobile Menu State
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Custom Hook managing all workspace logic, persistence, and history
+  // Custom Hook managing all workspace logic
   const {
     workspaces,
     activeWorkspaceId,
@@ -36,7 +39,6 @@ const App: React.FC = () => {
   } = useWorkspaces();
 
   const handleClear = () => {
-    // Simply clear without confirmation for better UX, relying on Undo if accidental
     clearActiveWorkspace();
     setSelectedTool(ToolType.SELECT);
   };
@@ -68,19 +70,16 @@ const App: React.FC = () => {
     setView({ x: window.innerWidth / 2, y: window.innerHeight / 2, k: 1 });
   };
   
-  // Initialize view center once on mount
   useEffect(() => {
     handleResetView();
   }, []);
 
-  // Keyboard shortcuts configuration
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      // Prevent shortcuts when typing in inputs
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
 
-      // Undo / Redo Shortcuts
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         if (e.shiftKey) {
           e.preventDefault();
@@ -91,14 +90,11 @@ const App: React.FC = () => {
         }
         return;
       }
-
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         redo();
         return;
       }
-
-      // Tool Shortcuts
       switch(e.key.toLowerCase()) {
         case 'p': setSelectedTool(ToolType.POINT); break;
         case 's': setSelectedTool(ToolType.SEGMENT); break;
@@ -111,6 +107,66 @@ const App: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo]); 
+
+  // --- Buttons Component (Reused for Mobile and Desktop) ---
+  const ActionButtons = ({ layout = 'col' }: { layout?: 'col' | 'row' }) => {
+    // Defines fixed dimensions for buttons to ensure perfect centering
+    const btnSize = layout === 'col' ? "w-10 h-10 md:w-9 md:h-9" : "w-12 h-12";
+    // Added p-0 to explicitly remove padding and rely on flex centering
+    const baseClass = "rounded-lg transition-colors active:scale-95 flex items-center justify-center shadow-sm p-0";
+
+    return (
+      <>
+        <button 
+          onClick={() => setSnapToGrid(!snapToGrid)} 
+          className={clsx(
+            baseClass, btnSize,
+            snapToGrid ? "text-amber-600 bg-amber-50" : "text-slate-600 hover:bg-slate-100 bg-white"
+          )} 
+          title="Imã (Snap)"
+        >
+           <Magnet size={20} />
+        </button>
+        <button 
+          onClick={() => setShowGrid(!showGrid)} 
+          className={clsx(
+            baseClass, btnSize,
+            showGrid ? "text-blue-600 bg-blue-50" : "text-slate-600 hover:bg-slate-100 bg-white"
+          )} 
+          title="Grade"
+        >
+           <Grid3x3 size={20} />
+        </button>
+        
+        {layout === 'col' && <div className="h-px bg-slate-200 mx-1 my-0.5 md:block hidden w-6 self-center" />}
+        
+        <button onClick={handleZoomIn} className={clsx(baseClass, btnSize, "text-slate-600 hover:bg-slate-100 bg-white")}>
+           <ZoomIn size={20} />
+        </button>
+        <button onClick={handleZoomOut} className={clsx(baseClass, btnSize, "text-slate-600 hover:bg-slate-100 bg-white")}>
+           <ZoomOut size={20} />
+        </button>
+        <button onClick={handleResetView} className={clsx(baseClass, btnSize, "text-slate-600 hover:bg-slate-100 bg-white")}>
+           <Maximize size={20} />
+        </button>
+  
+        {layout === 'col' && <div className="h-px bg-slate-200 mx-1 my-0.5 md:block hidden w-6 self-center" />}
+        
+        <button 
+          onClick={() => {
+              setIsChatOpen(!isChatOpen);
+              if (isMobileMenuOpen) setIsMobileMenuOpen(false);
+          }}
+          className={clsx(
+            baseClass, btnSize,
+            isChatOpen ? "bg-indigo-600 text-white shadow-md" : "text-indigo-600 hover:bg-indigo-50 bg-white"
+          )}
+        >
+           <MessageSquare size={20} />
+        </button>
+      </>
+    );
+  };
 
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-50 relative overflow-hidden font-sans touch-none">
@@ -136,46 +192,34 @@ const App: React.FC = () => {
           canRedo={canRedo}
         />
         
-        {/* Right Toolbar - Adjusted position for Mobile */}
-        <div className="absolute bottom-20 md:bottom-6 right-4 md:right-6 flex flex-col gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10 transition-all">
-           <button 
-             onClick={() => setSnapToGrid(!snapToGrid)} 
-             className={clsx(
-               "p-2.5 md:p-2 rounded-lg transition-colors active:scale-95",
-               snapToGrid ? "text-amber-600 bg-amber-50" : "text-slate-600 hover:bg-slate-100"
-             )} 
-           >
-              <Magnet size={20} />
-           </button>
-           <button 
-             onClick={() => setShowGrid(!showGrid)} 
-             className={clsx(
-               "p-2.5 md:p-2 rounded-lg transition-colors active:scale-95",
-               showGrid ? "text-blue-600 bg-blue-50" : "text-slate-600 hover:bg-slate-100"
-             )} 
-           >
-              <Grid3x3 size={20} />
-           </button>
-           <div className="h-px bg-slate-200 mx-1 my-0.5" />
-           <button onClick={handleZoomIn} className="p-2.5 md:p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors active:scale-95">
-              <ZoomIn size={20} />
-           </button>
-           <button onClick={handleZoomOut} className="p-2.5 md:p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors active:scale-95">
-              <ZoomOut size={20} />
-           </button>
-           <button onClick={handleResetView} className="p-2.5 md:p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors active:scale-95">
-              <Maximize size={20} />
-           </button>
-           <div className="h-px bg-slate-200 mx-1 my-0.5" />
-           <button 
-             onClick={() => setIsChatOpen(!isChatOpen)}
-             className={clsx(
-               "p-2.5 md:p-2 rounded-lg transition-all active:scale-95",
-               isChatOpen ? "bg-indigo-600 text-white shadow-md" : "text-indigo-600 hover:bg-indigo-50"
-             )}
-           >
-              <MessageSquare size={20} />
-           </button>
+        {/* DESKTOP Right Toolbar: Static Column */}
+        <div className="hidden md:flex absolute top-6 right-6 flex-col items-center gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10">
+           <ActionButtons layout="col" />
+        </div>
+
+        {/* MOBILE Right Toolbar: Collapsible Speed Dial */}
+        {/* Changed items-end to items-center to align stack with trigger button center */}
+        <div className="md:hidden absolute bottom-28 right-4 z-20 flex flex-col items-center gap-3 pointer-events-none">
+            {/* The list of actions (expands upwards) */}
+            <div className={clsx(
+                "flex flex-col items-center gap-3 transition-all duration-300 origin-bottom pb-2",
+                isMobileMenuOpen 
+                    ? "opacity-100 translate-y-0 scale-100 pointer-events-auto" 
+                    : "opacity-0 translate-y-10 scale-90 pointer-events-none"
+            )}>
+               <ActionButtons layout="col" />
+            </div>
+
+            {/* The Trigger Button */}
+            <button 
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className={clsx(
+                    "pointer-events-auto w-14 h-14 rounded-full shadow-xl transition-all duration-300 active:scale-90 flex items-center justify-center border border-slate-100 p-0",
+                    isMobileMenuOpen ? "bg-slate-800 text-white rotate-90" : "bg-white text-slate-700"
+                )}
+            >
+                {isMobileMenuOpen ? <X size={24} /> : <EllipsisVertical size={24} />}
+            </button>
         </div>
 
         <main className="absolute inset-0 z-0">
