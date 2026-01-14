@@ -3,6 +3,7 @@ import { TOOLS, ICONS } from '../constants';
 import { ToolType } from '../types';
 import clsx from 'clsx';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { Language, t } from '../utils/i18n';
 
 interface ToolbarProps {
   selectedTool: ToolType;
@@ -12,6 +13,7 @@ interface ToolbarProps {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  lang: Language;
 }
 
 const Toolbar: React.FC<ToolbarProps> = ({ 
@@ -21,7 +23,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onUndo, 
   onRedo, 
   canUndo, 
-  canRedo 
+  canRedo,
+  lang
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -103,7 +106,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
               onClick={onUndo}
               disabled={!canUndo}
               className="p-3 md:p-3 rounded-xl text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
-              title="Desfazer"
+              title={t[lang].toolbar.undo}
             >
               <ICONS.Undo size={22} />
             </button>
@@ -111,7 +114,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
               onClick={onRedo}
               disabled={!canRedo}
               className="p-3 md:p-3 rounded-xl text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
-              title="Refazer"
+              title={t[lang].toolbar.redo}
             >
               <ICONS.Redo size={22} />
             </button>
@@ -124,6 +127,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
             {TOOLS.map((tool) => {
               const Icon = tool.icon;
               const isSelected = selectedTool === tool.id;
+              const label = t[lang].tools[tool.id as keyof typeof t.pt.tools];
               return (
                 <button
                   key={tool.id}
@@ -134,7 +138,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
                       ? "bg-blue-600 text-white shadow-md"
                       : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                   )}
-                  title={tool.label}
+                  title={label}
                 >
                   <Icon size={24} strokeWidth={isSelected ? 2.5 : 2} />
                 </button>
@@ -148,7 +152,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
             onClick={onClear}
             className="p-3 rounded-xl text-red-500 hover:bg-red-50 hover:text-red-600 transition-all font-medium text-sm shrink-0 whitespace-nowrap active:scale-95"
           >
-            Limpar
+            {t[lang].toolbar.clear}
           </button>
         </div>
 

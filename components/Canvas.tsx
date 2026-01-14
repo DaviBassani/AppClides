@@ -5,6 +5,7 @@ import { useCanvasInteraction } from '../hooks/useCanvasInteraction';
 import Grid from './canvas/Grid';
 import { ShapeRenderer, GhostShapeRenderer } from './canvas/ShapeRenderer';
 import PointRenderer from './canvas/PointRenderer';
+import { Language, t } from '../utils/i18n';
 
 interface CanvasProps {
   tool: ToolType;
@@ -16,6 +17,7 @@ interface CanvasProps {
   setView: React.Dispatch<React.SetStateAction<{ x: number; y: number; k: number }>>;
   showGrid: boolean;
   snapToGrid: boolean;
+  lang: Language;
 }
 
 const Canvas: React.FC<CanvasProps> = ({ 
@@ -27,7 +29,8 @@ const Canvas: React.FC<CanvasProps> = ({
   view,
   setView,
   showGrid,
-  snapToGrid
+  snapToGrid,
+  lang
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -47,6 +50,8 @@ const Canvas: React.FC<CanvasProps> = ({
   const pointHoverRadius = 8 * visualScale;
   const axisWidth = 1.5 * visualScale;
   const intersectionRadius = 3 * visualScale;
+
+  const instructions = t[lang].canvas.instructions;
 
   return (
     <div 
@@ -119,12 +124,24 @@ const Canvas: React.FC<CanvasProps> = ({
       </svg>
 
       <div className="absolute bottom-6 left-6 text-xs text-slate-400 select-none pointer-events-none z-10 hidden md:block">
-         <div className="font-medium text-slate-500 mb-1">Scale: {view.k.toFixed(2)}x</div>
-         {tool === ToolType.POINT && "Clique para criar pontos"}
-         {tool === ToolType.SELECT && "Arraste pontos para mover, ou o fundo para navegar"}
-         {tool === ToolType.SEGMENT && "Selecione dois pontos"}
-         {tool === ToolType.CIRCLE && "Selecione centro e raio"}
-         <div className="mt-1 opacity-50">Euclides Web v1.5</div>
+         <div className="font-medium text-slate-500 mb-1">{t[lang].canvas.scale}: {view.k.toFixed(2)}x</div>
+         {tool === ToolType.POINT && instructions.POINT}
+         {tool === ToolType.SELECT && instructions.SELECT}
+         {tool === ToolType.SEGMENT && instructions.SEGMENT}
+         {tool === ToolType.LINE && instructions.LINE}
+         {tool === ToolType.CIRCLE && instructions.CIRCLE}
+         
+         <div className="mt-2 pt-2 border-t border-slate-200/50 flex flex-col gap-1 pointer-events-auto opacity-70 hover:opacity-100 transition-opacity">
+            <span className="font-medium">{t[lang].canvas.version}</span>
+            <a 
+              href="https://buymeacoffee.com/bassani" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-amber-600 hover:text-amber-500 transition-colors flex items-center gap-1.5"
+            >
+              <span>☕</span> {t[lang].canvas.support}
+            </a>
+         </div>
       </div>
     </div>
   );

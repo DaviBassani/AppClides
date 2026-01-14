@@ -9,8 +9,12 @@ import { useWorkspaces } from './hooks/useWorkspaces';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { EllipsisVertical, X } from 'lucide-react';
 import clsx from 'clsx';
+import { getBrowserLanguage, Language, t } from './utils/i18n';
 
 const App: React.FC = () => {
+  // Localization State
+  const [lang, setLang] = useState<Language>(getBrowserLanguage());
+
   const [selectedTool, setSelectedTool] = useState<ToolType>(ToolType.SELECT);
   
   // Canvas View State
@@ -32,6 +36,12 @@ const App: React.FC = () => {
   useEffect(() => {
     setView({ x: window.innerWidth / 2, y: window.innerHeight / 2, k: 1 });
   }, []);
+
+  // Update document language and title metadata
+  useEffect(() => {
+    document.documentElement.lang = lang === 'pt' ? 'pt-BR' : 'en';
+    document.title = lang === 'pt' ? 'Euclides Web - Geometria' : 'Euclides Web - Geometry';
+  }, [lang]);
 
   // Global Shortcuts
   useGlobalShortcuts({ onUndo: undo, onRedo: redo, onSelectTool: setSelectedTool });
@@ -76,7 +86,8 @@ const App: React.FC = () => {
     onZoomIn: handleZoomIn,
     onZoomOut: handleZoomOut,
     onResetView: handleResetView,
-    isChatOpen, setIsChatOpen
+    isChatOpen, setIsChatOpen,
+    lang
   };
 
   return (
@@ -86,9 +97,10 @@ const App: React.FC = () => {
         workspaces={workspaces}
         activeId={activeWorkspaceId}
         onSwitch={setActiveWorkspaceId}
-        onAdd={addWorkspace}
+        onAdd={() => addWorkspace(t[lang].tabs.untitled)}
         onClose={removeWorkspace}
         onRename={renameWorkspace}
+        lang={lang}
       />
 
       <div className="flex-1 relative w-full h-full">
@@ -100,10 +112,11 @@ const App: React.FC = () => {
           onRedo={redo}
           canUndo={canUndo}
           canRedo={canRedo}
+          lang={lang}
         />
         
-        {/* DESKTOP Right Toolbar: Static Column */}
-        <div className="hidden md:flex absolute top-6 right-6 flex-col items-center gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10">
+        {/* DESKTOP Right Toolbar: Static Column - Moved to BOTTOM Right */}
+        <div className="hidden md:flex absolute bottom-6 right-6 flex-col items-center gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10">
            <ViewControls {...viewControlsProps} layout="col" />
         </div>
 
@@ -148,6 +161,7 @@ const App: React.FC = () => {
             setView={setView}
             showGrid={showGrid}
             snapToGrid={snapToGrid}
+            lang={lang}
           />
         </main>
       </div>
@@ -158,6 +172,7 @@ const App: React.FC = () => {
         setShapes={updateShapes}
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
+        lang={lang}
       />
     </div>
   );

@@ -4,12 +4,12 @@ import { MousePointer2, Circle, Minus, Activity, XCircle, Dot, Undo2, Redo2 } fr
 export const SNAP_DISTANCE = 15;
 
 export const TOOLS = [
-  { id: ToolType.SELECT, label: 'Mover', icon: MousePointer2, shortcut: 'Esc' },
-  { id: ToolType.POINT, label: 'Ponto', icon: Dot, shortcut: 'P' },
-  { id: ToolType.SEGMENT, label: 'Segmento', icon: Minus, shortcut: 'S' },
-  { id: ToolType.LINE, label: 'Reta', icon: Activity, shortcut: 'R' }, // Using Activity as a proxy for infinite line visual
-  { id: ToolType.CIRCLE, label: 'Círculo', icon: Circle, shortcut: 'C' },
-  { id: ToolType.ERASER, label: 'Apagar', icon: XCircle, shortcut: 'Del' },
+  { id: ToolType.SELECT, icon: MousePointer2, shortcut: 'Esc' },
+  { id: ToolType.POINT, icon: Dot, shortcut: 'P' },
+  { id: ToolType.SEGMENT, icon: Minus, shortcut: 'S' },
+  { id: ToolType.LINE, icon: Activity, shortcut: 'R' }, // Using Activity as a proxy for infinite line visual
+  { id: ToolType.CIRCLE, icon: Circle, shortcut: 'C' },
+  { id: ToolType.ERASER, icon: XCircle, shortcut: 'Del' },
 ];
 
 export const ICONS = {

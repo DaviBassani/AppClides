@@ -1,5 +1,6 @@
 import { GoogleGenAI, FunctionDeclaration, Type, Tool } from "@google/genai";
 import { GeometricShape, Point, Workspace } from "../types";
+import { Language } from "../utils/i18n";
 
 let client: GoogleGenAI | null = null;
 
@@ -21,14 +22,14 @@ try {
 
 const createPointTool: FunctionDeclaration = {
     name: 'create_point',
-    description: 'Cria um ponto em uma coordenada específica (x, y) com um rótulo opcional (label). Use coordenadas numéricas. O centro da tela geralmente é próximo de x=800, y=400, mas varia.',
+    description: 'Creates a point at specific (x, y) coordinates with an optional label. Use numeric coordinates. The screen center is usually around x=800, y=400, but varies.',
     parameters: {
         type: Type.OBJECT,
         properties: {
-            x: { type: Type.NUMBER, description: 'Coordenada X' },
-            y: { type: Type.NUMBER, description: 'Coordenada Y' },
-            label: { type: Type.STRING, description: 'Rótulo do ponto (Ex: A, B, Centro)' },
-            id: { type: Type.STRING, description: 'Um ID único temporário para referenciar este ponto em chamadas subsequentes (Ex: p1)' }
+            x: { type: Type.NUMBER, description: 'X Coordinate' },
+            y: { type: Type.NUMBER, description: 'Y Coordinate' },
+            label: { type: Type.STRING, description: 'Point Label (Ex: A, B, Center)' },
+            id: { type: Type.STRING, description: 'A unique temporary ID to reference this point in subsequent calls (Ex: p1)' }
         },
         required: ['x', 'y', 'id']
     }
@@ -36,13 +37,13 @@ const createPointTool: FunctionDeclaration = {
 
 const createShapeTool: FunctionDeclaration = {
     name: 'create_shape',
-    description: 'Cria uma forma geométrica (segmento, reta ou círculo) conectando dois pontos existentes pelos seus IDs.',
+    description: 'Creates a geometric shape (segment, line, or circle) connecting two existing points by their IDs.',
     parameters: {
         type: Type.OBJECT,
         properties: {
-            type: { type: Type.STRING, enum: ['segment', 'line', 'circle'], description: 'Tipo da forma' },
-            p1_id: { type: Type.STRING, description: 'ID do primeiro ponto (ou centro do círculo)' },
-            p2_id: { type: Type.STRING, description: 'ID do segundo ponto (ou ponto do raio)' },
+            type: { type: Type.STRING, enum: ['segment', 'line', 'circle'], description: 'Shape type' },
+            p1_id: { type: Type.STRING, description: 'ID of the first point (or circle center)' },
+            p2_id: { type: Type.STRING, description: 'ID of the second point (or radius point)' },
         },
         required: ['type', 'p1_id', 'p2_id']
     }
@@ -50,7 +51,7 @@ const createShapeTool: FunctionDeclaration = {
 
 const clearBoardTool: FunctionDeclaration = {
     name: 'clear_board',
-    description: 'Limpa todo o quadro, removendo todos os pontos e formas.',
+    description: 'Clears the entire board, removing all points and shapes.',
     parameters: {
         type: Type.OBJECT,
         properties: {},
@@ -68,46 +69,63 @@ export interface GeminiResponse {
     functionCalls?: any[];
 }
 
-export const askEuclides = async (prompt: string, currentWorkspace: Workspace): Promise<GeminiResponse> => {
+export const askEuclides = async (prompt: string, currentWorkspace: Workspace, lang: Language): Promise<GeminiResponse> => {
     if (!client) {
-        return { text: "A chave de API não foi configurada. Por favor, adicione a variável de ambiente API_KEY na Vercel." };
+        return { text: lang === 'pt' ? "A chave de API não foi configurada." : "API Key not configured." };
     }
 
-    // Contextualize the AI with the current board state
-    const boardStateDescription = `
-    ESTADO ATUAL DO QUADRO (O MUNDO GEOMÉTRICO):
-    Pontos existentes: ${JSON.stringify(currentWorkspace.points)}
-    Formas existentes: ${JSON.stringify(currentWorkspace.shapes)}
+    const instructionsPt = `
+    ESTADO ATUAL DO QUADRO:
+    Pontos: ${JSON.stringify(currentWorkspace.points)}
+    Formas: ${JSON.stringify(currentWorkspace.shapes)}
     
     INSTRUÇÕES PARA A PERSONA (EUCLIDES):
     Você é Euclides de Alexandria, o "Pai da Geometria". 
     Seu tom deve ser:
-    1. Culto e Sereno: Use um português claro, elegante e preciso. Evite gírias modernas. Fale como um mestre sábio e paciente.
-    2. Analítico: Antes de responder, ANALISE o "Estado Atual do Quadro". Se o usuário desenhou três pontos, verifique se formam um triângulo. Se desenhou dois círculos que se cruzam, note isso.
-    3. Didático: Ao explicar, cite Postulados, Axiomas ou Proposições dos "Elementos" quando relevante. Use conectivos lógicos ("Portanto", "Logo", "Dado que").
-    4. Auxiliador: Se o usuário parecer perdido ou apenas desenhar formas aleatórias, sugira uma propriedade interessante sobre o que ele desenhou ou proponha um desafio (ex: "Vejo que traçaste um segmento. Desejas que eu demonstre como construir um triângulo equilátero sobre ele?").
+    1. Culto e Sereno: Use um português claro e elegante. Fale como um mestre sábio.
+    2. Analítico: ANALISE o "Estado Atual do Quadro".
+    3. Didático: Cite os "Elementos" quando relevante.
+    4. Auxiliador: Sugira propriedades ou desafios.
     
     REGRAS DE AÇÃO:
-    1. Se lhe pedirem uma Proposição (ex: "Demonstre a Proposição 1"), construa-a no quadro passo a passo usando as ferramentas. Explique cada passo.
-    2. Ao criar construções, primeiro crie os pontos (definindo IDs para eles) e depois conecte-os usando esses IDs na mesma resposta.
-    3. Ao final de uma demonstração formal, encerre com "C.Q.D." (Como Queria Demonstrar).
+    1. Se lhe pedirem uma Proposição, construa-a passo a passo.
+    2. Crie pontos primeiro, depois formas.
+    3. Encerre demonstrações formais com "C.Q.D.".
+    `;
+
+    const instructionsEn = `
+    CURRENT BOARD STATE:
+    Points: ${JSON.stringify(currentWorkspace.points)}
+    Shapes: ${JSON.stringify(currentWorkspace.shapes)}
+    
+    PERSONA INSTRUCTIONS (EUCLID):
+    You are Euclid of Alexandria, the "Father of Geometry". 
+    Your tone must be:
+    1. Cultured and Serene: Use clear, elegant English. Speak like a wise master.
+    2. Analytical: ANALYZE the "Current Board State".
+    3. Didactic: Cite the "Elements" when relevant.
+    4. Helpful: Suggest properties or challenges.
+    
+    ACTION RULES:
+    1. If asked for a Proposition, build it step-by-step.
+    2. Create points first, then shapes.
+    3. End formal proofs with "Q.E.D.".
     `;
 
     try {
         const response = await client.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: boardStateDescription + "\n\nEstudante: " + prompt,
+            contents: (lang === 'pt' ? instructionsPt : instructionsEn) + "\n\nStudent: " + prompt,
             config: {
                 tools: tools,
-                systemInstruction: "Você é Euclides. Você ensina geometria através de construções no quadro e diálogo socrático.",
-                temperature: 0.3 // Lower temperature for logic and precision
+                systemInstruction: lang === 'pt' 
+                    ? "Você é Euclides. Ensina geometria via construções e diálogo." 
+                    : "You are Euclid. Teach geometry via constructions and dialogue.",
+                temperature: 0.3 
             }
         });
 
-        // Extract text
         const text = response.candidates?.[0]?.content?.parts?.find(p => p.text)?.text || "";
-        
-        // Extract function calls
         const functionCalls = response.candidates?.[0]?.content?.parts
             ?.filter(p => p.functionCall)
             ?.map(p => p.functionCall);
@@ -116,6 +134,8 @@ export const askEuclides = async (prompt: string, currentWorkspace: Workspace): 
 
     } catch (error) {
         console.error("Error asking Gemini:", error);
-        return { text: "Perdoe-me, nobre estudante. Minha conexão com a Biblioteca de Alexandria falhou momentaneamente." };
+        return { text: lang === 'pt' 
+            ? "Perdoe-me, nobre estudante. Minha conexão com a Biblioteca falhou." 
+            : "Forgive me, noble student. My connection to the Library has failed." };
     }
 };

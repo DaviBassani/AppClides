@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, X, Layout } from 'lucide-react';
 import clsx from 'clsx';
 import { Workspace } from '../types';
+import { Language, t } from '../utils/i18n';
 
 interface TabsBarProps {
   workspaces: Workspace[];
@@ -10,6 +11,7 @@ interface TabsBarProps {
   onAdd: () => void;
   onClose: (id: string) => void;
   onRename: (id: string, newName: string) => void;
+  lang: Language;
 }
 
 const TabsBar: React.FC<TabsBarProps> = ({ 
@@ -18,7 +20,8 @@ const TabsBar: React.FC<TabsBarProps> = ({
   onSwitch, 
   onAdd, 
   onClose,
-  onRename
+  onRename,
+  lang
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -96,7 +99,7 @@ const TabsBar: React.FC<TabsBarProps> = ({
       <button
         onClick={onAdd}
         className="p-1.5 ml-1 rounded-md hover:bg-slate-300 text-slate-500 transition-colors"
-        title="Nova Demonstração"
+        title={t[lang].tabs.new}
       >
         <Plus size={16} />
       </button>

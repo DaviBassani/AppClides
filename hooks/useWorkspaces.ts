@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Workspace, Point, GeometricShape } from '../types';
 import { generateId } from '../utils/geometry';
 import { storage } from '../utils/storage';
+import { getBrowserLanguage, t } from '../utils/i18n';
 
 const createNewWorkspace = (name: string): Workspace => ({
   id: generateId(),
@@ -30,7 +31,9 @@ export const useWorkspaces = () => {
     if (saved && saved.workspaces.length > 0) {
       return saved.workspaces;
     }
-    return [createNewWorkspace('Sem Título 1')];
+    // Detect language for the very first workspace creation
+    const lang = getBrowserLanguage();
+    return [createNewWorkspace(`${t[lang].tabs.untitled} 1`)];
   });
 
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(() => {
@@ -199,8 +202,9 @@ export const useWorkspaces = () => {
 
   // --- Workspace Management ---
 
-  const addWorkspace = useCallback(() => {
-    const newWs = createNewWorkspace(`Sem Título ${workspaces.length + 1}`);
+  const addWorkspace = useCallback((defaultName?: string) => {
+    const name = defaultName || `Untitled ${workspaces.length + 1}`;
+    const newWs = createNewWorkspace(name);
     setWorkspaces(prev => [...prev, newWs]);
     setActiveWorkspaceId(newWs.id);
   }, [workspaces.length]);

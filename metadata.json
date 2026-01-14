@@ -1,5 +1,5 @@
 {
-  "name": "Euclides Web - Geometria Euclidiana",
-  "description": "Uma aplicação interativa para exploração e demonstração de Geometria Euclidiana com assistência de IA.",
+  "name": "Euclides Web - Euclidean Geometry",
+  "description": "An interactive application for exploring and demonstrating Euclidean Geometry with AI assistance.",
   "requestFramePermissions": []
 }

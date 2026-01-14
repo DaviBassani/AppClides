@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { askEuclides, GeminiResponse } from '../services/gemini';
 import { Workspace, Point, GeometricShape } from '../types';
 import { generateId } from '../utils/geometry';
+import { Language, t } from '../utils/i18n';
 
 export interface ChatMessage {
     role: 'user' | 'assistant';
@@ -12,12 +13,19 @@ interface UseChatProps {
     activeWorkspace: Workspace;
     setPoints: React.Dispatch<React.SetStateAction<Record<string, Point>>>;
     setShapes: React.Dispatch<React.SetStateAction<GeometricShape[]>>;
+    lang: Language;
 }
 
-export const useChat = ({ activeWorkspace, setPoints, setShapes }: UseChatProps) => {
-    const [messages, setMessages] = useState<ChatMessage[]>([
-        { role: 'assistant', text: 'Saudações, estudante. Sou **Euclides**. O quadro está à vossa disposição. Desejas que eu demonstre a *Proposição 1* dos Elementos, ou preferes que eu analise vossas construções atuais?' }
-    ]);
+export const useChat = ({ activeWorkspace, setPoints, setShapes, lang }: UseChatProps) => {
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    
+    // Reset messages when language changes, effectively restarting the persona in the new language
+    useEffect(() => {
+        setMessages([
+            { role: 'assistant', text: t[lang].chat.initialMessage }
+        ]);
+    }, [lang]);
+
     const [isLoading, setIsLoading] = useState(false);
 
     const executeFunctionCalls = (functionCalls: any[]) => {
@@ -77,7 +85,7 @@ export const useChat = ({ activeWorkspace, setPoints, setShapes }: UseChatProps)
         setIsLoading(true);
     
         try {
-          const response: GeminiResponse = await askEuclides(input, activeWorkspace);
+          const response: GeminiResponse = await askEuclides(input, activeWorkspace, lang);
           
           if (response.text) {
             setMessages(prev => [...prev, { role: 'assistant', text: response.text }]);
@@ -87,12 +95,12 @@ export const useChat = ({ activeWorkspace, setPoints, setShapes }: UseChatProps)
             executeFunctionCalls(response.functionCalls);
             
             if (!response.text) {
-                 setMessages(prev => [...prev, { role: 'assistant', text: '*Traçando as linhas necessárias no papiro digital...*' }]);
+                 setMessages(prev => [...prev, { role: 'assistant', text: `*${t[lang].chat.thinking}*` }]);
             }
           }
     
         } catch (error) {
-          setMessages(prev => [...prev, { role: 'assistant', text: 'Perdoe-me, houve uma perturbação no raciocínio lógico.' }]);
+          setMessages(prev => [...prev, { role: 'assistant', text: t[lang].chat.error }]);
         } finally {
           setIsLoading(false);
         }
