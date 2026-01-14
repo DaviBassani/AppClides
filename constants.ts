@@ -1,5 +1,5 @@
 import { ToolType } from './types';
-import { MousePointer2, Circle, Minus, Activity, XCircle, Dot } from 'lucide-react';
+import { MousePointer2, Circle, Minus, Activity, XCircle, Dot, Undo2, Redo2 } from 'lucide-react';
 
 export const SNAP_DISTANCE = 15;
 
@@ -11,6 +11,11 @@ export const TOOLS = [
   { id: ToolType.CIRCLE, label: 'Círculo', icon: Circle, shortcut: 'C' },
   { id: ToolType.ERASER, label: 'Apagar', icon: XCircle, shortcut: 'Del' },
 ];
+
+export const ICONS = {
+  Undo: Undo2,
+  Redo: Redo2
+};
 
 export const COLORS = {
   primary: '#3b82f6', // blue-500

@@ -1,8 +1,7 @@
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { ToolType, Point, GeometricShape, ShapeType } from '../types';
 import { COLORS, SNAP_DISTANCE } from '../constants';
 import { generateId, distance, findNearestPoint, getLineEnds, getAllIntersections } from '../utils/geometry';
-import { ZoomIn, ZoomOut, Maximize, Grid3x3, Magnet } from 'lucide-react';
 import clsx from 'clsx';
 
 interface CanvasProps {
@@ -11,28 +10,37 @@ interface CanvasProps {
   shapes: GeometricShape[];
   setPoints: React.Dispatch<React.SetStateAction<Record<string, Point>>>;
   setShapes: React.Dispatch<React.SetStateAction<GeometricShape[]>>;
+  view: { x: number; y: number; k: number };
+  setView: React.Dispatch<React.SetStateAction<{ x: number; y: number; k: number }>>;
+  showGrid: boolean;
+  snapToGrid: boolean;
 }
 
 const GRID_SIZE = 20;
 
-const Canvas: React.FC<CanvasProps> = ({ tool, points, shapes, setPoints, setShapes }) => {
+const Canvas: React.FC<CanvasProps> = ({ 
+  tool, 
+  points, 
+  shapes, 
+  setPoints, 
+  setShapes,
+  view,
+  setView,
+  showGrid,
+  snapToGrid
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   
-  // View State
-  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
-  const [cursor, setCursor] = useState({ x: 0, y: 0 }); 
-  const [showGrid, setShowGrid] = useState(true);
-  const [snapToGrid, setSnapToGrid] = useState(false);
-  
   // Interaction State
-  const [draftStartId, setDraftStartId] = useState<string | null>(null);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [hoveredIntersection, setHoveredIntersection] = useState<{x: number, y: number} | null>(null);
+  const [cursor, setCursor] = React.useState({ x: 0, y: 0 }); 
+  const [draftStartId, setDraftStartId] = React.useState<string | null>(null);
+  const [draggingId, setDraggingId] = React.useState<string | null>(null);
+  const [hoveredId, setHoveredId] = React.useState<string | null>(null);
+  const [hoveredIntersection, setHoveredIntersection] = React.useState<{x: number, y: number} | null>(null);
   
   // Panning State
-  const [isPanning, setIsPanning] = useState(false);
-  const [lastPanPos, setLastPanPos] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = React.useState(false);
+  const [lastPanPos, setLastPanPos] = React.useState({ x: 0, y: 0 });
 
   // Effective visual sizes
   const visualScale = 1 / view.k;
@@ -44,7 +52,6 @@ const Canvas: React.FC<CanvasProps> = ({ tool, points, shapes, setPoints, setSha
   const intersectionRadius = 3 * visualScale;
 
   // Memoize intersections to avoid recalculating every single render
-  // Recalculate only when shapes or points change
   const intersections = useMemo(() => {
     return getAllIntersections(shapes, points);
   }, [shapes, points]);
@@ -77,9 +84,6 @@ const Canvas: React.FC<CanvasProps> = ({ tool, points, shapes, setPoints, setSha
     }
 
     // 3. Snap to Intersections (Priority 2)
-    // Only snap to intersections if Magnet is ON (similar to grid) or if we decide intersections are always magnetic.
-    // Let's make intersections always magnetic but subtle if magnet is off, or consistent. 
-    // Usually, intersection snapping is a "Magnet" feature.
     if (snapToGrid) {
       let nearestInt: {x: number, y: number} | null = null;
       let minIntDist = effectiveSnapDistance;
@@ -235,32 +239,6 @@ const Canvas: React.FC<CanvasProps> = ({ tool, points, shapes, setPoints, setSha
   const getTargetPoint = (x: number, y: number, existingId: string | null): { id: string } => {
     if (existingId) return { id: existingId };
     return { id: createPoint(x, y) };
-  };
-
-  const resetView = () => {
-    setView({ x: containerRef.current ? containerRef.current.clientWidth / 2 : 0, y: containerRef.current ? containerRef.current.clientHeight / 2 : 0, k: 1 });
-  };
-  
-  const zoomIn = () => {
-      const cx = containerRef.current ? containerRef.current.clientWidth / 2 : 0;
-      const cy = containerRef.current ? containerRef.current.clientHeight / 2 : 0;
-      const newK = Math.min(50, view.k * 1.2);
-      const worldX = (cx - view.x) / view.k;
-      const worldY = (cy - view.y) / view.k;
-      const newX = cx - worldX * newK;
-      const newY = cy - worldY * newK;
-      setView({ k: newK, x: newX, y: newY });
-  };
-
-  const zoomOut = () => {
-      const cx = containerRef.current ? containerRef.current.clientWidth / 2 : 0;
-      const cy = containerRef.current ? containerRef.current.clientHeight / 2 : 0;
-      const newK = Math.max(0.1, view.k / 1.2);
-      const worldX = (cx - view.x) / view.k;
-      const worldY = (cy - view.y) / view.k;
-      const newX = cx - worldX * newK;
-      const newY = cy - worldY * newK;
-      setView({ k: newK, x: newX, y: newY });
   };
 
   // --- Renderers ---
@@ -436,40 +414,6 @@ const Canvas: React.FC<CanvasProps> = ({ tool, points, shapes, setPoints, setSha
          {tool === ToolType.SEGMENT && "Selecione dois pontos"}
          {tool === ToolType.CIRCLE && "Selecione centro e raio"}
          <div className="mt-1 opacity-50">Euclides Web v1.4</div>
-      </div>
-
-      <div className="absolute bottom-6 right-6 flex flex-col gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10">
-         <button 
-           onClick={() => setSnapToGrid(!snapToGrid)} 
-           className={clsx(
-             "p-2 rounded-lg transition-colors",
-             snapToGrid ? "text-amber-600 bg-amber-50" : "text-slate-600 hover:bg-slate-100"
-           )} 
-           title="Ativar Imã (Grade + Interseções)"
-         >
-            <Magnet size={20} />
-         </button>
-         <div className="h-px bg-slate-200 mx-1 my-0.5" />
-         <button 
-           onClick={() => setShowGrid(!showGrid)} 
-           className={clsx(
-             "p-2 rounded-lg transition-colors",
-             showGrid ? "text-blue-600 bg-blue-50" : "text-slate-600 hover:bg-slate-100"
-           )} 
-           title="Alternar Grade"
-         >
-            <Grid3x3 size={20} />
-         </button>
-         <div className="h-px bg-slate-200 mx-1 my-0.5" />
-         <button onClick={zoomIn} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Zoom In">
-            <ZoomIn size={20} />
-         </button>
-         <button onClick={zoomOut} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Zoom Out">
-            <ZoomOut size={20} />
-         </button>
-         <button onClick={resetView} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Reset View">
-            <Maximize size={20} />
-         </button>
       </div>
     </div>
   );

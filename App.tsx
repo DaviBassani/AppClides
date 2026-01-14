@@ -3,118 +3,102 @@ import Toolbar from './components/Toolbar';
 import Canvas from './components/Canvas';
 import Chat from './components/Chat';
 import TabsBar from './components/TabsBar';
-import { ToolType, Point, GeometricShape, Workspace } from './types';
-import { generateId } from './utils/geometry';
-
-const createWorkspace = (name: string): Workspace => ({
-  id: generateId(),
-  name,
-  points: {},
-  shapes: [],
-  createdAt: Date.now(),
-});
+import { ToolType } from './types';
+import { useWorkspaces } from './hooks/useWorkspaces';
+import { ZoomIn, ZoomOut, Maximize, Grid3x3, Magnet, MessageSquare } from 'lucide-react';
+import clsx from 'clsx';
 
 const App: React.FC = () => {
   const [selectedTool, setSelectedTool] = useState<ToolType>(ToolType.SELECT);
   
-  // Workspace State
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([createWorkspace('Demonstração 1')]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(workspaces[0].id);
+  // Canvas View State lifted to App
+  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const [showGrid, setShowGrid] = useState(true);
+  const [snapToGrid, setSnapToGrid] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
-  // Computed active workspace data
-  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId) || workspaces[0];
-
-  // Initialize with some demo data in the first tab if empty
-  useEffect(() => {
-    // Only add demo data if it's the very first load
-    if (workspaces.length === 1 && Object.keys(workspaces[0].points).length === 0) {
-       const idA = 'demo_A';
-       const idB = 'demo_B';
-       const idC = 'demo_C';
-       
-       const w = window.innerWidth;
-       const h = window.innerHeight;
-       const cx = w / 2;
-       const cy = h / 2;
-
-       setWorkspaces(prev => {
-         const newWs = [...prev];
-         newWs[0] = {
-           ...newWs[0],
-           points: {
-            [idA]: { id: idA, x: cx - 100, y: cy + 50, label: 'A' },
-            [idB]: { id: idB, x: cx + 100, y: cy + 50, label: 'B' },
-            [idC]: { id: idC, x: cx, y: cy - 120, label: 'C' },
-           },
-           shapes: [
-            { id: 's1', type: 'segment', p1: idA, p2: idB },
-            { id: 's2', type: 'segment', p1: idB, p2: idC },
-            { id: 's3', type: 'segment', p1: idC, p2: idA },
-            { id: 'c1', type: 'circle', p1: idC, p2: idA }
-           ]
-         };
-         return newWs;
-       });
-    }
-  }, []); // Run once
-
-  // --- Workspace Wrappers for Canvas ---
-  
-  // Wrapper to update points for the active workspace
-  const handleSetPoints: React.Dispatch<React.SetStateAction<Record<string, Point>>> = (action) => {
-    setWorkspaces(prev => prev.map(ws => {
-      if (ws.id !== activeWorkspaceId) return ws;
-      const newPoints = typeof action === 'function' ? action(ws.points) : action;
-      return { ...ws, points: newPoints };
-    }));
-  };
-
-  // Wrapper to update shapes for the active workspace
-  const handleSetShapes: React.Dispatch<React.SetStateAction<GeometricShape[]>> = (action) => {
-    setWorkspaces(prev => prev.map(ws => {
-      if (ws.id !== activeWorkspaceId) return ws;
-      const newShapes = typeof action === 'function' ? action(ws.shapes) : action;
-      return { ...ws, shapes: newShapes };
-    }));
-  };
-
-  // --- Tab Management ---
-
-  const handleAddTab = () => {
-    const newWs = createWorkspace(`Demonstração ${workspaces.length + 1}`);
-    setWorkspaces(prev => [...prev, newWs]);
-    setActiveWorkspaceId(newWs.id);
-  };
-
-  const handleCloseTab = (id: string) => {
-    if (workspaces.length <= 1) return;
-    
-    const newWorkspaces = workspaces.filter(w => w.id !== id);
-    setWorkspaces(newWorkspaces);
-    
-    // If we closed the active one, switch to the last one
-    if (activeWorkspaceId === id) {
-      setActiveWorkspaceId(newWorkspaces[newWorkspaces.length - 1].id);
-    }
-  };
-
-  const handleRenameTab = (id: string, newName: string) => {
-    setWorkspaces(prev => prev.map(ws => ws.id === id ? { ...ws, name: newName } : ws));
-  };
+  // Custom Hook managing all workspace logic, persistence, and history
+  const {
+    workspaces,
+    activeWorkspaceId,
+    activeWorkspace,
+    setActiveWorkspaceId,
+    addWorkspace,
+    removeWorkspace,
+    renameWorkspace,
+    updatePoints,
+    updateShapes,
+    clearActiveWorkspace,
+    undo,
+    redo,
+    canUndo,
+    canRedo
+  } = useWorkspaces();
 
   const handleClear = () => {
-    if (window.confirm(`Tem certeza que deseja limpar o quadro "${activeWorkspace.name}"?`)) {
-      handleSetPoints({});
-      handleSetShapes([]);
-      setSelectedTool(ToolType.SELECT);
-    }
+    // Simply clear without confirmation for better UX, relying on Undo if accidental
+    clearActiveWorkspace();
+    setSelectedTool(ToolType.SELECT);
   };
 
-  // Keyboard shortcuts
+  // View Helpers
+  const handleZoomIn = () => {
+    setView(prev => {
+      const k = Math.min(50, prev.k * 1.2);
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      const worldX = (cx - prev.x) / prev.k;
+      const worldY = (cy - prev.y) / prev.k;
+      return { ...prev, k, x: cx - worldX * k, y: cy - worldY * k };
+    });
+  };
+
+  const handleZoomOut = () => {
+    setView(prev => {
+      const k = Math.max(0.1, prev.k / 1.2);
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      const worldX = (cx - prev.x) / prev.k;
+      const worldY = (cy - prev.y) / prev.k;
+      return { ...prev, k, x: cx - worldX * k, y: cy - worldY * k };
+    });
+  };
+
+  const handleResetView = () => {
+    setView({ x: window.innerWidth / 2, y: window.innerHeight / 2, k: 1 });
+  };
+  
+  // Initialize view center once on mount
+  useEffect(() => {
+    handleResetView();
+  }, []);
+
+  // Keyboard shortcuts configuration
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      const target = e.target as HTMLElement;
+      // Prevent shortcuts when typing in inputs
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
 
+      // Undo / Redo Shortcuts
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          redo();
+        } else {
+          e.preventDefault();
+          undo();
+        }
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+        return;
+      }
+
+      // Tool Shortcuts
       switch(e.key.toLowerCase()) {
         case 'p': setSelectedTool(ToolType.POINT); break;
         case 's': setSelectedTool(ToolType.SEGMENT); break;
@@ -126,19 +110,19 @@ const App: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [undo, redo]); 
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-slate-50 relative overflow-hidden">
+    <div className="h-screen w-screen flex flex-col bg-slate-50 relative overflow-hidden font-sans">
       
       {/* Tabs Bar */}
       <TabsBar 
         workspaces={workspaces}
         activeId={activeWorkspaceId}
         onSwitch={setActiveWorkspaceId}
-        onAdd={handleAddTab}
-        onClose={handleCloseTab}
-        onRename={handleRenameTab}
+        onAdd={addWorkspace}
+        onClose={removeWorkspace}
+        onRename={renameWorkspace}
       />
 
       <div className="flex-1 relative w-full h-full">
@@ -146,25 +130,81 @@ const App: React.FC = () => {
           selectedTool={selectedTool} 
           onSelectTool={setSelectedTool}
           onClear={handleClear}
+          onUndo={undo}
+          onRedo={redo}
+          canUndo={canUndo}
+          canRedo={canRedo}
         />
         
+        {/* Right Toolbar */}
+        <div className="absolute bottom-6 right-6 flex flex-col gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10">
+           <button 
+             onClick={() => setSnapToGrid(!snapToGrid)} 
+             className={clsx(
+               "p-2 rounded-lg transition-colors",
+               snapToGrid ? "text-amber-600 bg-amber-50" : "text-slate-600 hover:bg-slate-100"
+             )} 
+             title="Ativar Imã (Grade + Interseções)"
+           >
+              <Magnet size={20} />
+           </button>
+           <button 
+             onClick={() => setShowGrid(!showGrid)} 
+             className={clsx(
+               "p-2 rounded-lg transition-colors",
+               showGrid ? "text-blue-600 bg-blue-50" : "text-slate-600 hover:bg-slate-100"
+             )} 
+             title="Alternar Grade"
+           >
+              <Grid3x3 size={20} />
+           </button>
+           <div className="h-px bg-slate-200 mx-1 my-0.5" />
+           <button onClick={handleZoomIn} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Zoom In">
+              <ZoomIn size={20} />
+           </button>
+           <button onClick={handleZoomOut} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Zoom Out">
+              <ZoomOut size={20} />
+           </button>
+           <button onClick={handleResetView} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Reset View">
+              <Maximize size={20} />
+           </button>
+           <div className="h-px bg-slate-200 mx-1 my-0.5" />
+           <button 
+             onClick={() => setIsChatOpen(!isChatOpen)}
+             className={clsx(
+               "p-2 rounded-lg transition-all",
+               isChatOpen ? "bg-indigo-600 text-white shadow-md" : "text-indigo-600 hover:bg-indigo-50"
+             )}
+             title="O Geômetra"
+           >
+              <MessageSquare size={20} />
+           </button>
+        </div>
+
         <main className="absolute inset-0">
-          {/* Key prop ensures Canvas remounts and resets view state when tab changes */}
+          {/* Key prop ensures Canvas remounts/resets view state when switching tabs */}
+          {/* Actually we might want to preserve view state per workspace, but keeping it simple for now (global view) or let it reset */}
           <Canvas 
             key={activeWorkspace.id} 
             tool={selectedTool}
             points={activeWorkspace.points}
             shapes={activeWorkspace.shapes}
-            setPoints={handleSetPoints}
-            setShapes={handleSetShapes}
+            setPoints={updatePoints}
+            setShapes={updateShapes}
+            view={view}
+            setView={setView}
+            showGrid={showGrid}
+            snapToGrid={snapToGrid}
           />
         </main>
       </div>
 
       <Chat 
         activeWorkspace={activeWorkspace}
-        setPoints={handleSetPoints}
-        setShapes={handleSetShapes}
+        setPoints={updatePoints}
+        setShapes={updateShapes}
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
       />
     </div>
   );
