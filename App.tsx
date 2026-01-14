@@ -3,9 +3,11 @@ import Toolbar from './components/Toolbar';
 import Canvas from './components/Canvas';
 import Chat from './components/Chat';
 import TabsBar from './components/TabsBar';
+import ViewControls from './components/ViewControls';
 import { ToolType } from './types';
 import { useWorkspaces } from './hooks/useWorkspaces';
-import { ZoomIn, ZoomOut, Maximize, Grid3x3, Magnet, MessageSquare, EllipsisVertical, X } from 'lucide-react';
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { EllipsisVertical, X } from 'lucide-react';
 import clsx from 'clsx';
 
 const App: React.FC = () => {
@@ -16,34 +18,31 @@ const App: React.FC = () => {
   const [showGrid, setShowGrid] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  
-  // Mobile Menu State
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Custom Hook managing all workspace logic
   const {
-    workspaces,
-    activeWorkspaceId,
-    activeWorkspace,
-    setActiveWorkspaceId,
-    addWorkspace,
-    removeWorkspace,
-    renameWorkspace,
-    updatePoints,
-    updateShapes,
-    clearActiveWorkspace,
-    undo,
-    redo,
-    canUndo,
-    canRedo
+    workspaces, activeWorkspaceId, activeWorkspace, setActiveWorkspaceId,
+    addWorkspace, removeWorkspace, renameWorkspace,
+    updatePoints, updateShapes, clearActiveWorkspace,
+    undo, redo, canUndo, canRedo
   } = useWorkspaces();
+
+  // Initialize view
+  useEffect(() => {
+    setView({ x: window.innerWidth / 2, y: window.innerHeight / 2, k: 1 });
+  }, []);
+
+  // Global Shortcuts
+  useGlobalShortcuts({ onUndo: undo, onRedo: redo, onSelectTool: setSelectedTool });
+
+  // --- View Handlers ---
 
   const handleClear = () => {
     clearActiveWorkspace();
     setSelectedTool(ToolType.SELECT);
   };
 
-  // View Helpers
   const handleZoomIn = () => {
     setView(prev => {
       const k = Math.min(50, prev.k * 1.2);
@@ -70,108 +69,19 @@ const App: React.FC = () => {
     setView({ x: window.innerWidth / 2, y: window.innerHeight / 2, k: 1 });
   };
   
-  useEffect(() => {
-    handleResetView();
-  }, []);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
-        if (e.shiftKey) {
-          e.preventDefault();
-          redo();
-        } else {
-          e.preventDefault();
-          undo();
-        }
-        return;
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
-        e.preventDefault();
-        redo();
-        return;
-      }
-      switch(e.key.toLowerCase()) {
-        case 'p': setSelectedTool(ToolType.POINT); break;
-        case 's': setSelectedTool(ToolType.SEGMENT); break;
-        case 'r': setSelectedTool(ToolType.LINE); break;
-        case 'c': setSelectedTool(ToolType.CIRCLE); break;
-        case 'escape': setSelectedTool(ToolType.SELECT); break;
-        case 'delete': setSelectedTool(ToolType.ERASER); break;
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo]); 
-
-  // --- Buttons Component (Reused for Mobile and Desktop) ---
-  const ActionButtons = ({ layout = 'col' }: { layout?: 'col' | 'row' }) => {
-    // Defines fixed dimensions for buttons to ensure perfect centering
-    const btnSize = layout === 'col' ? "w-10 h-10 md:w-9 md:h-9" : "w-12 h-12";
-    // Added p-0 to explicitly remove padding and rely on flex centering
-    const baseClass = "rounded-lg transition-colors active:scale-95 flex items-center justify-center shadow-sm p-0";
-
-    return (
-      <>
-        <button 
-          onClick={() => setSnapToGrid(!snapToGrid)} 
-          className={clsx(
-            baseClass, btnSize,
-            snapToGrid ? "text-amber-600 bg-amber-50" : "text-slate-600 hover:bg-slate-100 bg-white"
-          )} 
-          title="Imã (Snap)"
-        >
-           <Magnet size={20} />
-        </button>
-        <button 
-          onClick={() => setShowGrid(!showGrid)} 
-          className={clsx(
-            baseClass, btnSize,
-            showGrid ? "text-blue-600 bg-blue-50" : "text-slate-600 hover:bg-slate-100 bg-white"
-          )} 
-          title="Grade"
-        >
-           <Grid3x3 size={20} />
-        </button>
-        
-        {layout === 'col' && <div className="h-px bg-slate-200 mx-1 my-0.5 md:block hidden w-6 self-center" />}
-        
-        <button onClick={handleZoomIn} className={clsx(baseClass, btnSize, "text-slate-600 hover:bg-slate-100 bg-white")}>
-           <ZoomIn size={20} />
-        </button>
-        <button onClick={handleZoomOut} className={clsx(baseClass, btnSize, "text-slate-600 hover:bg-slate-100 bg-white")}>
-           <ZoomOut size={20} />
-        </button>
-        <button onClick={handleResetView} className={clsx(baseClass, btnSize, "text-slate-600 hover:bg-slate-100 bg-white")}>
-           <Maximize size={20} />
-        </button>
-  
-        {layout === 'col' && <div className="h-px bg-slate-200 mx-1 my-0.5 md:block hidden w-6 self-center" />}
-        
-        <button 
-          onClick={() => {
-              setIsChatOpen(!isChatOpen);
-              if (isMobileMenuOpen) setIsMobileMenuOpen(false);
-          }}
-          className={clsx(
-            baseClass, btnSize,
-            isChatOpen ? "bg-indigo-600 text-white shadow-md" : "text-indigo-600 hover:bg-indigo-50 bg-white"
-          )}
-        >
-           <MessageSquare size={20} />
-        </button>
-      </>
-    );
+  // Combine view control props
+  const viewControlsProps = {
+    snapToGrid, setSnapToGrid,
+    showGrid, setShowGrid,
+    onZoomIn: handleZoomIn,
+    onZoomOut: handleZoomOut,
+    onResetView: handleResetView,
+    isChatOpen, setIsChatOpen
   };
 
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-50 relative overflow-hidden font-sans touch-none">
       
-      {/* Tabs Bar */}
       <TabsBar 
         workspaces={workspaces}
         activeId={activeWorkspaceId}
@@ -194,23 +104,27 @@ const App: React.FC = () => {
         
         {/* DESKTOP Right Toolbar: Static Column */}
         <div className="hidden md:flex absolute top-6 right-6 flex-col items-center gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10">
-           <ActionButtons layout="col" />
+           <ViewControls {...viewControlsProps} layout="col" />
         </div>
 
         {/* MOBILE Right Toolbar: Collapsible Speed Dial */}
-        {/* Changed items-end to items-center to align stack with trigger button center */}
         <div className="md:hidden absolute bottom-28 right-4 z-20 flex flex-col items-center gap-3 pointer-events-none">
-            {/* The list of actions (expands upwards) */}
             <div className={clsx(
                 "flex flex-col items-center gap-3 transition-all duration-300 origin-bottom pb-2",
                 isMobileMenuOpen 
                     ? "opacity-100 translate-y-0 scale-100 pointer-events-auto" 
                     : "opacity-0 translate-y-10 scale-90 pointer-events-none"
             )}>
-               <ActionButtons layout="col" />
+               <ViewControls 
+                {...viewControlsProps} 
+                setIsChatOpen={(v) => {
+                    setIsChatOpen(v);
+                    setIsMobileMenuOpen(false);
+                }}
+                layout="col" 
+               />
             </div>
 
-            {/* The Trigger Button */}
             <button 
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 className={clsx(
