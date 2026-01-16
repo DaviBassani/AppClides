@@ -1,6 +1,9 @@
 import { GoogleGenAI, FunctionDeclaration, Type, Tool } from "@google/genai";
 
-// Standard Vercel Serverless Function Handler
+export const config = {
+    runtime: 'edge', // Optional: Makes it faster on Vercel
+};
+
 export default async function handler(request: Request) {
     if (request.method !== 'POST') {
         return new Response('Method Not Allowed', { status: 405 });
@@ -10,7 +13,7 @@ export default async function handler(request: Request) {
 
     if (!apiKey) {
         return new Response(JSON.stringify({ 
-            error: "Server Configuration Error: API_KEY is missing." 
+            error: "Server Configuration Error: API_KEY is missing in environment variables." 
         }), { 
             status: 500,
             headers: { 'Content-Type': 'application/json' }
@@ -19,11 +22,12 @@ export default async function handler(request: Request) {
 
     try {
         const body = await request.json();
-        const { prompt, points, shapes, lang } = body;
+        // Added 'texts' to destructuring
+        const { prompt, points, shapes, texts, lang } = body;
 
         const client = new GoogleGenAI({ apiKey });
 
-        // --- Tool Definitions (Moved to Server) ---
+        // --- Tool Definitions ---
         const createPointTool: FunctionDeclaration = {
             name: 'create_point',
             description: 'Creates a point at specific (x, y) coordinates with an optional label. Use numeric coordinates. The screen center is usually around x=800, y=400, but varies.',
@@ -67,10 +71,12 @@ export default async function handler(request: Request) {
         }];
 
         // --- Prompt Engineering ---
+        // Updated to include Texts in context
         const instructionsPt = `
         ESTADO ATUAL DO QUADRO:
         Pontos: ${JSON.stringify(points)}
         Formas: ${JSON.stringify(shapes)}
+        Textos: ${JSON.stringify(texts || {})}
         
         INSTRUÇÕES PARA A PERSONA (EUCLIDES):
         Você é Euclides de Alexandria, o "Pai da Geometria". 
@@ -90,6 +96,7 @@ export default async function handler(request: Request) {
         CURRENT BOARD STATE:
         Points: ${JSON.stringify(points)}
         Shapes: ${JSON.stringify(shapes)}
+        Texts: ${JSON.stringify(texts || {})}
         
         PERSONA INSTRUCTIONS (EUCLID):
         You are Euclid of Alexandria, the "Father of Geometry". 

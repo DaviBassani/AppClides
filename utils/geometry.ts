@@ -1,4 +1,4 @@
-import { Point, GeometricShape } from '../types';
+import { Point, GeometricShape, TextLabel } from '../types';
 import { SNAP_DISTANCE } from '../constants';
 
 export const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -23,6 +23,27 @@ export const findNearestPoint = (
     if (d < minDist) {
       minDist = d;
       nearestId = p.id;
+    }
+  });
+
+  return nearestId;
+};
+
+export const findNearestText = (
+  x: number,
+  y: number,
+  texts: Record<string, TextLabel>,
+  threshold: number = SNAP_DISTANCE
+): string | null => {
+  let nearestId: string | null = null;
+  let minDist = threshold;
+
+  Object.values(texts).forEach((t) => {
+    const d = distance({ x, y }, t);
+    // Give texts a slightly larger hit area since they are larger visually
+    if (d < minDist + 10) {
+      minDist = d;
+      nearestId = t.id;
     }
   });
 

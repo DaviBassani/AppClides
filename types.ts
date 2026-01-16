@@ -4,6 +4,7 @@ export enum ToolType {
   SEGMENT = 'SEGMENT',
   LINE = 'LINE',
   CIRCLE = 'CIRCLE',
+  TEXT = 'TEXT',
   ERASER = 'ERASER'
 }
 
@@ -12,6 +13,14 @@ export interface Point {
   x: number;
   y: number;
   label?: string;
+  color?: string;
+}
+
+export interface TextLabel {
+  id: string;
+  x: number;
+  y: number;
+  content: string;
   color?: string;
 }
 
@@ -30,6 +39,7 @@ export interface Workspace {
   name: string;
   points: Record<string, Point>;
   shapes: GeometricShape[];
+  texts: Record<string, TextLabel>;
   createdAt: number;
 }
 

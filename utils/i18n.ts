@@ -14,6 +14,7 @@ export const t = {
       SEGMENT: 'Segmento',
       LINE: 'Reta',
       CIRCLE: 'Círculo',
+      TEXT: 'Texto',
       ERASER: 'Apagar'
     },
     toolbar: {
@@ -25,14 +26,15 @@ export const t = {
       scale: 'Escala',
       instructions: {
         POINT: 'Clique para criar pontos',
-        SELECT: 'Arraste pontos para mover, ou o fundo para navegar',
+        SELECT: 'Arraste objetos para mover, ou o fundo para navegar',
         SEGMENT: 'Selecione dois pontos',
         LINE: 'Selecione dois pontos',
         CIRCLE: 'Selecione centro e raio',
-        ERASER: 'Clique em pontos para apagar'
+        TEXT: 'Clique para adicionar texto',
+        ERASER: 'Clique em objetos para apagar'
       },
       support: 'Apoiar o projeto',
-      version: 'Euclides Web v1.5'
+      version: 'Euclides Web v1.6'
     },
     chat: {
       title: 'O Geômetra',
@@ -63,6 +65,7 @@ export const t = {
       SEGMENT: 'Segment',
       LINE: 'Line',
       CIRCLE: 'Circle',
+      TEXT: 'Text',
       ERASER: 'Erase'
     },
     toolbar: {
@@ -74,14 +77,15 @@ export const t = {
       scale: 'Scale',
       instructions: {
         POINT: 'Click to create points',
-        SELECT: 'Drag points to move, or background to pan',
+        SELECT: 'Drag objects to move, or background to pan',
         SEGMENT: 'Select two points',
         LINE: 'Select two points',
         CIRCLE: 'Select center and radius',
-        ERASER: 'Click points to delete'
+        TEXT: 'Click to add text',
+        ERASER: 'Click objects to delete'
       },
       support: 'Support the project',
-      version: 'Euclides Web v1.5'
+      version: 'Euclides Web v1.6'
     },
     chat: {
       title: 'The Geometer',

@@ -28,7 +28,7 @@ const App: React.FC = () => {
   const {
     workspaces, activeWorkspaceId, activeWorkspace, setActiveWorkspaceId,
     addWorkspace, removeWorkspace, renameWorkspace,
-    updatePoints, updateShapes, clearActiveWorkspace, deleteSelection,
+    updatePoints, updateShapes, updateTexts, clearActiveWorkspace, deleteSelection,
     undo, redo, canUndo, canRedo
   } = useWorkspaces();
 
@@ -142,8 +142,10 @@ const App: React.FC = () => {
             tool={selectedTool}
             points={activeWorkspace.points}
             shapes={activeWorkspace.shapes}
+            texts={activeWorkspace.texts}
             setPoints={updatePoints}
             setShapes={updateShapes}
+            setTexts={updateTexts}
             view={view}
             setView={setView}
             showGrid={showGrid}

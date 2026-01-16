@@ -1,5 +1,5 @@
 import { ToolType } from './types';
-import { MousePointer2, Circle, Minus, Activity, XCircle, Dot, Undo2, Redo2 } from 'lucide-react';
+import { MousePointer2, Circle, Minus, Activity, XCircle, Dot, Undo2, Redo2, Type } from 'lucide-react';
 
 export const SNAP_DISTANCE = 15;
 
@@ -9,6 +9,7 @@ export const TOOLS = [
   { id: ToolType.SEGMENT, icon: Minus, shortcut: 'S' },
   { id: ToolType.LINE, icon: Activity, shortcut: 'R' }, // Using Activity as a proxy for infinite line visual
   { id: ToolType.CIRCLE, icon: Circle, shortcut: 'C' },
+  { id: ToolType.TEXT, icon: Type, shortcut: 'T' },
   { id: ToolType.ERASER, icon: XCircle, shortcut: 'E' },
 ];
 
@@ -24,6 +25,7 @@ export const COLORS = {
   point: '#1e293b', // slate-800
   grid: '#e2e8f0', // slate-200
   selection: '#818cf8', // indigo-400
+  text: '#334155', // slate-700
 };
 
 export const PALETTE = [

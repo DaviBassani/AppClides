@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Workspace, Point, GeometricShape } from '../types';
+import { Workspace, Point, GeometricShape, TextLabel } from '../types';
 import { generateId } from '../utils/geometry';
 import { storage } from '../utils/storage';
 import { getBrowserLanguage, t } from '../utils/i18n';
@@ -9,12 +9,14 @@ const createNewWorkspace = (name: string): Workspace => ({
   name,
   points: {},
   shapes: [],
+  texts: {},
   createdAt: Date.now(),
 });
 
 interface HistorySnapshot {
   points: Record<string, Point>;
   shapes: GeometricShape[];
+  texts: Record<string, TextLabel>;
 }
 
 interface WorkspaceHistory {
@@ -29,7 +31,11 @@ export const useWorkspaces = () => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>(() => {
     const saved = storage.load();
     if (saved && saved.workspaces.length > 0) {
-      return saved.workspaces;
+      // Backwards compatibility: ensure 'texts' exists if loading old data
+      return saved.workspaces.map(ws => ({
+        ...ws,
+        texts: ws.texts || {}
+      }));
     }
     // Detect language for the very first workspace creation
     const lang = getBrowserLanguage();
@@ -65,11 +71,11 @@ export const useWorkspaces = () => {
   }, [history]);
 
   // Push current state to 'past' before making changes
-  const saveSnapshot = useCallback((wsId: string, currentPoints: Record<string, Point>, currentShapes: GeometricShape[]) => {
+  const saveSnapshot = useCallback((wsId: string, currentPoints: Record<string, Point>, currentShapes: GeometricShape[], currentTexts: Record<string, TextLabel>) => {
     setHistory(prev => {
       const wsHistory = prev[wsId] || { past: [], future: [] };
       // Limit history size to 50 steps to prevent memory issues
-      const newPast = [...wsHistory.past, { points: currentPoints, shapes: currentShapes }].slice(-50);
+      const newPast = [...wsHistory.past, { points: currentPoints, shapes: currentShapes, texts: currentTexts }].slice(-50);
       return {
         ...prev,
         [wsId]: {
@@ -95,7 +101,8 @@ export const useWorkspaces = () => {
     // Save current state to future
     const currentSnapshot: HistorySnapshot = { 
       points: activeWorkspace.points, 
-      shapes: activeWorkspace.shapes 
+      shapes: activeWorkspace.shapes,
+      texts: activeWorkspace.texts
     };
 
     setHistory(prev => ({
@@ -109,7 +116,7 @@ export const useWorkspaces = () => {
     // Apply previous state
     setWorkspaces(prev => prev.map(ws => {
       if (ws.id !== targetId) return ws;
-      return { ...ws, points: previous.points, shapes: previous.shapes };
+      return { ...ws, points: previous.points, shapes: previous.shapes, texts: previous.texts };
     }));
   }, [activeWorkspace, getHistory]);
 
@@ -125,7 +132,8 @@ export const useWorkspaces = () => {
     // Save current state to past
     const currentSnapshot: HistorySnapshot = { 
       points: activeWorkspace.points, 
-      shapes: activeWorkspace.shapes 
+      shapes: activeWorkspace.shapes,
+      texts: activeWorkspace.texts
     };
 
     setHistory(prev => ({
@@ -139,7 +147,7 @@ export const useWorkspaces = () => {
     // Apply next state
     setWorkspaces(prev => prev.map(ws => {
       if (ws.id !== targetId) return ws;
-      return { ...ws, points: next.points, shapes: next.shapes };
+      return { ...ws, points: next.points, shapes: next.shapes, texts: next.texts };
     }));
   }, [activeWorkspace, getHistory]);
 
@@ -156,7 +164,7 @@ export const useWorkspaces = () => {
     if (currentPoints === newPoints) return;
 
     // 2. Save snapshot of OLD state
-    saveSnapshot(targetId, currentPoints, activeWorkspace.shapes);
+    saveSnapshot(targetId, currentPoints, activeWorkspace.shapes, activeWorkspace.texts);
 
     // 3. Update state
     setWorkspaces(prev => prev.map(ws => {
@@ -175,7 +183,7 @@ export const useWorkspaces = () => {
     if (currentShapes === newShapes) return;
 
     // 2. Save snapshot of OLD state
-    saveSnapshot(targetId, activeWorkspace.points, currentShapes);
+    saveSnapshot(targetId, activeWorkspace.points, currentShapes, activeWorkspace.texts);
 
     // 3. Update state
     setWorkspaces(prev => prev.map(ws => {
@@ -184,19 +192,35 @@ export const useWorkspaces = () => {
     }));
   }, [activeWorkspace, saveSnapshot]);
 
-  const clearActiveWorkspace = useCallback(() => {
+  const updateTexts = useCallback((action: React.SetStateAction<Record<string, TextLabel>>) => {
     const targetId = activeWorkspace.id;
     
-    // Check if already empty to avoid redundant history entries
-    const isEmpty = Object.keys(activeWorkspace.points).length === 0 && activeWorkspace.shapes.length === 0;
-    if (isEmpty) return;
+    const currentTexts = activeWorkspace.texts || {};
+    const newTexts = typeof action === 'function' ? (action as Function)(currentTexts) : action;
 
-    // Save snapshot before clearing
-    saveSnapshot(targetId, activeWorkspace.points, activeWorkspace.shapes);
+    if (currentTexts === newTexts) return;
+
+    saveSnapshot(targetId, activeWorkspace.points, activeWorkspace.shapes, currentTexts);
 
     setWorkspaces(prev => prev.map(ws => {
       if (ws.id !== targetId) return ws;
-      return { ...ws, points: {}, shapes: [] };
+      return { ...ws, texts: newTexts };
+    }));
+  }, [activeWorkspace, saveSnapshot]);
+
+
+  const clearActiveWorkspace = useCallback(() => {
+    const targetId = activeWorkspace.id;
+    
+    // Check if already empty
+    const isEmpty = Object.keys(activeWorkspace.points).length === 0 && activeWorkspace.shapes.length === 0 && Object.keys(activeWorkspace.texts || {}).length === 0;
+    if (isEmpty) return;
+
+    saveSnapshot(targetId, activeWorkspace.points, activeWorkspace.shapes, activeWorkspace.texts);
+
+    setWorkspaces(prev => prev.map(ws => {
+      if (ws.id !== targetId) return ws;
+      return { ...ws, points: {}, shapes: [], texts: {} };
     }));
   }, [activeWorkspace, saveSnapshot]);
 
@@ -204,23 +228,23 @@ export const useWorkspaces = () => {
       if (selectedIds.length === 0) return;
       const targetId = activeWorkspace.id;
 
-      // Save snapshot
-      saveSnapshot(targetId, activeWorkspace.points, activeWorkspace.shapes);
+      saveSnapshot(targetId, activeWorkspace.points, activeWorkspace.shapes, activeWorkspace.texts);
 
       setWorkspaces(prev => prev.map(ws => {
           if (ws.id !== targetId) return ws;
 
           // Logic:
-          // 1. Identify shapes explicitly selected for deletion.
+          // 1. Identify shapes/texts explicitly selected for deletion.
           // 2. Identify points explicitly selected for deletion.
           // 3. Identify shapes connected to those points (cascade delete).
           
           let shapesToDelete = new Set<string>();
           const pointsToDelete = new Set<string>();
+          const textsToDelete = new Set<string>();
 
           selectedIds.forEach(id => {
               if (ws.points[id]) pointsToDelete.add(id);
-              // Check if it's a shape ID (optimization: could maintain a map, but array find is fast enough for <100 items)
+              if (ws.texts && ws.texts[id]) textsToDelete.add(id);
               if (ws.shapes.find(s => s.id === id)) shapesToDelete.add(id);
           });
 
@@ -236,7 +260,10 @@ export const useWorkspaces = () => {
           const newPoints = { ...ws.points };
           pointsToDelete.forEach(id => delete newPoints[id]);
 
-          return { ...ws, shapes: newShapes, points: newPoints };
+          const newTexts = { ...ws.texts };
+          textsToDelete.forEach(id => delete newTexts[id]);
+
+          return { ...ws, shapes: newShapes, points: newPoints, texts: newTexts };
       }));
   }, [activeWorkspace, saveSnapshot]);
 
@@ -282,6 +309,7 @@ export const useWorkspaces = () => {
     renameWorkspace,
     updatePoints,
     updateShapes,
+    updateTexts,
     clearActiveWorkspace,
     deleteSelection,
     undo,
