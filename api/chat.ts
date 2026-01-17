@@ -57,14 +57,14 @@ export default async function handler(request: Request) {
 
         const createShapeTool: FunctionDeclaration = {
             name: 'create_shape',
-            description: 'Connects two points. CRITICAL: Distinguish between SEGMENT (finite) and LINE (infinite). Use color to differentiate GIVEN from CONSTRUCTION.',
+            description: 'Connects two points. CRITICAL: Distinguish between SEGMENT (finite), LINE (infinite both directions), and RAY (infinite one direction). Use color to differentiate GIVEN from CONSTRUCTION.',
             parameters: {
                 type: Type.OBJECT,
                 properties: {
                     type: {
                         type: Type.STRING,
-                        enum: ['segment', 'line', 'circle'],
-                        description: 'Use "segment" for polygon sides (finite). Use "line" for infinite construction lines.'
+                        enum: ['segment', 'line', 'ray', 'circle'],
+                        description: 'Use "segment" for polygon sides (finite). Use "line" for infinite lines in both directions. Use "ray" for semi-infinite lines starting at p1 through p2. Use "circle" for circles.'
                     },
                     p1_id: { type: Type.STRING },
                     p2_id: { type: Type.STRING },
@@ -222,9 +222,11 @@ export default async function handler(request: Request) {
         **STRICT GEOMETRIC DEFINITIONS:**
         1. **SEGMENT (segmento):** Finite connection between two points. Used for triangles, squares, polygons, and radii.
            -> Tool: create_shape(type='segment', p1_id='...', p2_id='...')
-        2. **LINE (reta):** Infinite line passing through two points. Used for extending sides or finding intersections far away.
+        2. **LINE (reta):** Infinite line passing through two points in both directions. Used for extending sides or finding intersections.
            -> Tool: create_shape(type='line', p1_id='...', p2_id='...')
-        3. **CIRCLE (círculo):** Defined by center point and radius point (point on circumference).
+        3. **RAY (semi-reta):** Semi-infinite line starting at p1 and extending infinitely through p2. Used for angles and directed constructions.
+           -> Tool: create_shape(type='ray', p1_id='start', p2_id='direction')
+        4. **CIRCLE (círculo):** Defined by center point and radius point (point on circumference).
            -> Tool: create_shape(type='circle', p1_id='center', p2_id='radius_point')
 
         **CRITICAL RULES:**
@@ -334,9 +336,11 @@ export default async function handler(request: Request) {
         **STRICT GEOMETRIC DEFINITIONS:**
         1. **SEGMENT (segmento):** Finite connection between two points. Used for triangles, squares, polygons, and radii.
            -> Tool: create_shape(type='segment', p1_id='...', p2_id='...')
-        2. **LINE (reta):** Infinite line passing through two points. Used for extending sides or finding intersections far away.
+        2. **LINE (reta):** Infinite line passing through two points in both directions. Used for extending sides or finding intersections.
            -> Tool: create_shape(type='line', p1_id='...', p2_id='...')
-        3. **CIRCLE (círculo):** Defined by center point and radius point (point on circumference).
+        3. **RAY (semi-reta):** Semi-infinite line starting at p1 and extending infinitely through p2. Used for angles and directed constructions.
+           -> Tool: create_shape(type='ray', p1_id='start', p2_id='direction')
+        4. **CIRCLE (círculo):** Defined by center point and radius point (point on circumference).
            -> Tool: create_shape(type='circle', p1_id='center', p2_id='radius_point')
 
         **COLOR USAGE:**

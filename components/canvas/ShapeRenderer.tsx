@@ -1,7 +1,7 @@
 import React from 'react';
 import { GeometricShape, Point, ShapeType } from '../../types';
 import { COLORS } from '../../constants';
-import { distance, getLineEnds } from '../../utils/geometry';
+import { distance, getLineEnds, getRayEnd } from '../../utils/geometry';
 
 interface ShapeRendererProps {
   shape: GeometricShape;
@@ -24,6 +24,10 @@ export const ShapeRenderer: React.FC<ShapeRendererProps> = React.memo(({ shape, 
         {shape.type === 'segment' && <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={COLORS.selection} strokeWidth={shadowStroke} strokeLinecap="round" opacity={0.4} />}
         {shape.type === 'line' && (() => {
              const { x1, y1, x2, y2 } = getLineEnds(p1, p2, 0, 0);
+             return <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={COLORS.selection} strokeWidth={shadowStroke} strokeLinecap="round" opacity={0.4} />
+        })()}
+        {shape.type === 'ray' && (() => {
+             const { x1, y1, x2, y2 } = getRayEnd(p1, p2);
              return <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={COLORS.selection} strokeWidth={shadowStroke} strokeLinecap="round" opacity={0.4} />
         })()}
         {shape.type === 'circle' && <circle cx={p1.x} cy={p1.y} r={distance(p1, p2)} fill="transparent" stroke={COLORS.selection} strokeWidth={shadowStroke} opacity={0.4} />}
@@ -54,6 +58,22 @@ export const ShapeRenderer: React.FC<ShapeRendererProps> = React.memo(({ shape, 
             <line
               x1={x1} y1={y1}
               x2={x2} y2={y2}
+              stroke={color}
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+              strokeDasharray={dash}
+              opacity={opacity}
+            />
+        </g>
+      );
+    case 'ray':
+      const rayEnd = getRayEnd(p1, p2);
+      return (
+        <g>
+            <Shadow />
+            <line
+              x1={rayEnd.x1} y1={rayEnd.y1}
+              x2={rayEnd.x2} y2={rayEnd.y2}
               stroke={color}
               strokeWidth={strokeWidth}
               strokeLinecap="round"

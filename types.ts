@@ -24,7 +24,7 @@ export interface TextLabel {
   color?: string;
 }
 
-export type ShapeType = 'segment' | 'line' | 'circle';
+export type ShapeType = 'segment' | 'line' | 'circle' | 'ray';
 
 export interface GeometricShape {
   id: string;
