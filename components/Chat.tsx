@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, ChevronDown } from 'lucide-react';
+import { Send, Sparkles, ChevronDown, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
-import { Workspace, Point, GeometricShape } from '../types';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import { Workspace, Point, GeometricShape, TextLabel } from '../types';
 import { useChat } from '../hooks/useChat';
 import { Language, t } from '../utils/i18n';
 
@@ -10,13 +12,14 @@ interface ChatProps {
   activeWorkspace: Workspace;
   setPoints: React.Dispatch<React.SetStateAction<Record<string, Point>>>;
   setShapes: React.Dispatch<React.SetStateAction<GeometricShape[]>>;
+  setTexts?: React.Dispatch<React.SetStateAction<Record<string, TextLabel>>>;
   isOpen: boolean;
   onClose: () => void;
   lang: Language;
 }
 
-const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, isOpen, onClose, lang }) => {
-  const { messages, isLoading, sendMessage } = useChat({ activeWorkspace, setPoints, setShapes, lang });
+const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, setTexts, isOpen, onClose, lang }) => {
+  const { messages, isLoading, sendMessage } = useChat({ activeWorkspace, setPoints, setShapes, setTexts, lang });
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -76,7 +79,21 @@ const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, isOp
                 : "mr-auto bg-white text-slate-800 border border-slate-200 rounded-bl-none font-serif"
             )}
           >
-            <ReactMarkdown>{msg.text}</ReactMarkdown>
+            <ReactMarkdown 
+                remarkPlugins={[remarkMath]} 
+                rehypePlugins={[rehypeKatex]}
+                className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2"
+            >
+                {msg.text}
+            </ReactMarkdown>
+            
+            {/* Visual Debug Info */}
+            {msg.debugInfo && (
+                <div className="mt-2 pt-2 border-t border-red-100 flex items-start gap-1.5 text-xs text-red-600 font-mono bg-red-50 p-1.5 rounded">
+                    <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                    <span>DEBUG: {msg.debugInfo}</span>
+                </div>
+            )}
           </div>
         ))}
         {isLoading && (
@@ -84,6 +101,7 @@ const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, isOp
               <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
               <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
               <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              <span className="ml-2 font-mono text-[10px] opacity-50">processing...</span>
           </div>
         )}
         <div ref={messagesEndRef} />

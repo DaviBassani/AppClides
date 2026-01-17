@@ -4,10 +4,12 @@ import { Language } from "../utils/i18n";
 export interface GeminiResponse {
     text: string;
     functionCalls?: any[];
+    errorDetails?: string;
 }
 
 export const askEuclides = async (prompt: string, currentWorkspace: Workspace, lang: Language): Promise<GeminiResponse> => {
     try {
+        // We now call the Vercel Serverless Function instead of the SDK directly
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
@@ -19,24 +21,30 @@ export const askEuclides = async (prompt: string, currentWorkspace: Workspace, l
                 shapes: currentWorkspace.shapes,
                 texts: currentWorkspace.texts,
                 lang
-            })
+            }),
         });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            console.error("API Error details:", errorData);
-            throw new Error(`Server responded with ${response.status}`);
+            throw new Error(errorData.details || `Server error: ${response.status}`);
         }
 
         const data = await response.json();
-        return data as GeminiResponse;
+        return {
+            text: data.text,
+            functionCalls: data.functionCalls
+        };
 
-    } catch (error) {
-        console.error("Error asking Gemini via API:", error);
+    } catch (error: any) {
+        console.error("API Call Error:", error);
+        
+        const errorMessage = lang === 'pt' 
+            ? "Perdoe-me, não consigo acessar a biblioteca de Alexandria no momento (Erro de Conexão)." 
+            : "Forgive me, I cannot access the library of Alexandria at this moment (Connection Error).";
+
         return { 
-            text: lang === 'pt' 
-                ? "Perdoe-me, nobre estudante. Minha conexão com a Biblioteca falhou (Erro de Servidor)." 
-                : "Forgive me, noble student. My connection to the Library has failed (Server Error)." 
+            text: errorMessage, 
+            errorDetails: error.message 
         };
     }
 };

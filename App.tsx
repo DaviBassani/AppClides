@@ -162,6 +162,7 @@ const App: React.FC = () => {
         activeWorkspace={activeWorkspace}
         setPoints={updatePoints}
         setShapes={updateShapes}
+        setTexts={updateTexts}
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
         lang={lang}
