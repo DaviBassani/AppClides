@@ -55,17 +55,20 @@ export const getLineEnds = (p1: { x: number; y: number }, p2: { x: number; y: nu
   const dx = p2.x - p1.x;
   const dy = p2.y - p1.y;
 
+  // Use very large values for truly infinite appearance (1 million units)
+  const INFINITY = 1000000;
+
   if (Math.abs(dx) < 0.001) {
     // Vertical line
-    return { x1: p1.x, y1: -10000, x2: p1.x, y2: 10000 };
+    return { x1: p1.x, y1: -INFINITY, x2: p1.x, y2: INFINITY };
   }
 
   const m = dy / dx;
   const b = p1.y - m * p1.x;
 
-  const x1 = -10000;
+  const x1 = -INFINITY;
   const y1 = m * x1 + b;
-  const x2 = 10000;
+  const x2 = INFINITY;
   const y2 = m * x2 + b;
 
   return { x1, y1, x2, y2 };
@@ -76,22 +79,25 @@ export const getRayEnd = (p1: { x: number; y: number }, p2: { x: number; y: numb
   const dx = p2.x - p1.x;
   const dy = p2.y - p1.y;
 
+  // Use very large values for truly infinite appearance (1 million units)
+  const INFINITY = 1000000;
+
   if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
     // Points are the same, extend arbitrarily to the right
-    return { x1: p1.x, y1: p1.y, x2: 10000, y2: p1.y };
+    return { x1: p1.x, y1: p1.y, x2: INFINITY, y2: p1.y };
   }
 
   if (Math.abs(dx) < 0.001) {
     // Vertical ray
     const direction = dy > 0 ? 1 : -1;
-    return { x1: p1.x, y1: p1.y, x2: p1.x, y2: p1.y + direction * 20000 };
+    return { x1: p1.x, y1: p1.y, x2: p1.x, y2: p1.y + direction * INFINITY };
   }
 
   // Calculate slope and extend in the direction of p2
   const m = dy / dx;
   const direction = dx > 0 ? 1 : -1;
 
-  const x2 = p1.x + direction * 20000;
+  const x2 = p1.x + direction * INFINITY;
   const y2 = p1.y + m * (x2 - p1.x);
 
   return { x1: p1.x, y1: p1.y, x2, y2 };

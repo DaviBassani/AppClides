@@ -306,17 +306,41 @@ export const useCanvasInteraction = ({
 
       const { x, y, snappedId } = getEffectiveCoordinates(clientX, clientY, draftStartId);
       const dist = Math.sqrt(Math.pow(x - startPoint.x, 2) + Math.pow(y - startPoint.y, 2));
-      
+
       const dragThreshold = 20 * visualScale;
 
       if (dist > dragThreshold) {
-          const target = getTargetPoint(x, y, snappedId);
-          if (draftStartId !== target.id) {
+          // For LINE and RAY, we don't need to create the second point visibly
+          // We just use it for direction
+          const isDirectionalShape = tool === ToolType.LINE || tool === ToolType.RAY;
+
+          let targetId: string;
+
+          if (isDirectionalShape) {
+              // For directional shapes, only create a point if user explicitly snapped to one
+              if (snappedId) {
+                  targetId = snappedId;
+              } else {
+                  // Create a temporary invisible point just for direction
+                  // This point won't be added to the visible points
+                  targetId = generateId();
+                  // Store it temporarily for the shape to reference
+                  const tempPoint: Point = { id: targetId, x, y };
+                  // Add to points temporarily just for the shape reference
+                  setPoints(prev => ({ ...prev, [targetId]: tempPoint }));
+              }
+          } else {
+              // For SEGMENT and CIRCLE, create the target point normally
+              const target = getTargetPoint(x, y, snappedId);
+              targetId = target.id;
+          }
+
+          if (draftStartId !== targetId) {
               const newShape: GeometricShape = {
                 id: generateId(),
                 type: tool.toLowerCase() as ShapeType,
                 p1: draftStartId,
-                p2: target.id,
+                p2: targetId,
               };
               setShapes(prev => [...prev, newShape]);
               setDraftStartId(null);
