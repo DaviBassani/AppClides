@@ -31,14 +31,18 @@ export default async function handler(request: Request) {
 
         const createPointTool: FunctionDeclaration = {
             name: 'create_point',
-            description: 'Creates a point at (x, y). ID required.',
+            description: 'Creates a point at (x, y). ID required. Use color to differentiate GIVEN data from CONSTRUCTION steps.',
             parameters: {
                 type: Type.OBJECT,
                 properties: {
                     x: { type: Type.NUMBER },
                     y: { type: Type.NUMBER },
                     label: { type: Type.STRING },
-                    id: { type: Type.STRING }
+                    id: { type: Type.STRING },
+                    color: {
+                        type: Type.STRING,
+                        description: 'Hex color code. Use #3b82f6 (blue) for GIVEN/initial points, #22c55e (green) for CONSTRUCTION/demonstration points.'
+                    }
                 },
                 required: ['x', 'y', 'id']
             }
@@ -46,17 +50,21 @@ export default async function handler(request: Request) {
 
         const createShapeTool: FunctionDeclaration = {
             name: 'create_shape',
-            description: 'Connects two points. CRITICAL: Distinguish between SEGMENT (finite) and LINE (infinite).',
+            description: 'Connects two points. CRITICAL: Distinguish between SEGMENT (finite) and LINE (infinite). Use color to differentiate GIVEN from CONSTRUCTION.',
             parameters: {
                 type: Type.OBJECT,
                 properties: {
-                    type: { 
-                        type: Type.STRING, 
+                    type: {
+                        type: Type.STRING,
                         enum: ['segment', 'line', 'circle'],
                         description: 'Use "segment" for polygon sides (finite). Use "line" for infinite construction lines.'
                     },
                     p1_id: { type: Type.STRING },
                     p2_id: { type: Type.STRING },
+                    color: {
+                        type: Type.STRING,
+                        description: 'Hex color code. Use #3b82f6 (blue) for GIVEN/initial shapes, #22c55e (green) for CONSTRUCTION/demonstration shapes.'
+                    }
                 },
                 required: ['type', 'p1_id', 'p2_id']
             }
@@ -112,21 +120,69 @@ export default async function handler(request: Request) {
         - When creating new points, use sequential labels (A, B, C, D, ...) unless the user specifies otherwise
         - Use LaTeX for ALL mathematical notation: points ($A$), segments ($AB$), angles ($\\angle ABC$), etc.
 
-        **CONSTRUCTION METHODOLOGY:**
-        - Follow classical compass and straightedge methods from "Elements"
-        - Explain each step BEFORE executing it
-        - Reference propositions from your book when relevant (e.g., "Following Proposition I.1...")
-        - Do NOT calculate final coordinates - construct step by step
+        **CONSTRUCTION METHODOLOGY - CRITICAL:**
+        You MUST follow the complete classical method from the "Elements" for EVERY proposition:
 
-        **EXAMPLE - Equilateral Triangle on segment AB:**
-        "Let me construct an equilateral triangle following Proposition I.1 from my Elements:
+        **1. DADO (GIVEN)** - Draw in BLUE (#3b82f6):
+           - The initial conditions or premise
+           - What the student has provided or what is assumed
+           - Example: "Given segment $AB$"
 
-        1. First, I shall draw a circle with center $A$ passing through $B$
-        2. Then, a circle with center $B$ passing through $A$
-        3. These circles intersect at point $C$ above the line
-        4. Finally, I connect $A$ to $C$ and $B$ to $C$ with segments
+        **2. TESE (TO PROVE/CONSTRUCT)** - State clearly:
+           - What we aim to demonstrate or construct
+           - Example: "To construct an equilateral triangle on the given segment"
 
-        Behold! Triangle $ABC$ is equilateral, for $AC = AB = BC$ by construction."
+        **3. DEMONSTRAÇÃO (DEMONSTRATION)** - Draw in GREEN (#22c55e):
+           - Execute ALL construction steps with compass and straightedge
+           - This is the CORE of teaching - you MUST complete the entire demonstration
+           - Do NOT stop after drawing the given - that's only the beginning!
+           - Each step must use the tools: create_point, create_shape with appropriate colors
+
+        **4. CONCLUSÃO (CONCLUSION)**:
+           - Explain why the construction proves the theorem
+           - Reference equality of segments, angles, etc.
+
+        **COLOR USAGE - MANDATORY:**
+        - 🔵 BLUE (#3b82f6): All GIVEN/initial geometry (what the student provides)
+        - 🟢 GREEN (#22c55e): All CONSTRUCTION steps (what YOU create to demonstrate)
+        - This visual separation is ESSENTIAL for learning!
+
+        **EXAMPLE - Complete Proposition I.1 (Equilateral Triangle):**
+
+        **DADO:** Seja dado o segmento $AB$ (in blue).
+
+        **TESE:** Construir um triângulo equilátero sobre o segmento dado $AB$.
+
+        **DEMONSTRAÇÃO:**
+        [Here you explain AND execute with function calls:]
+
+        1. Com centro em $A$ e raio $AB$, traço um círculo (green)
+           -> create_shape(type='circle', p1_id='A', p2_id='B', color='#22c55e')
+
+        2. Com centro em $B$ e raio $BA$, traço outro círculo (green)
+           -> create_shape(type='circle', p1_id='B', p2_id='A', color='#22c55e')
+
+        3. Esses círculos se interceptam no ponto $C$ (green)
+           -> create_point(x=..., y=..., label='C', id='C', color='#22c55e')
+
+        4. Traço o segmento $AC$ (green)
+           -> create_shape(type='segment', p1_id='A', p2_id='C', color='#22c55e')
+
+        5. Traço o segmento $BC$ (green)
+           -> create_shape(type='segment', p1_id='B', p2_id='C', color='#22c55e')
+
+        **CONCLUSÃO:** O triângulo $ABC$ é equilátero, pois $AC = AB = BC$ por construção.
+
+        **REMEMBER:** Never stop at just drawing the GIVEN! Always complete the ENTIRE demonstration in green!
+
+        **COMMON MISTAKE TO AVOID:**
+        ❌ BAD: Drawing only the DADO (given segment AB) and stopping
+        ✅ GOOD: Drawing the DADO in blue, then executing ALL construction steps in green to complete the proof
+
+        When a student asks to "demonstrate Proposition I.1" or "construct an equilateral triangle":
+        - Step 1: Draw the DADO (given segment) in BLUE
+        - Step 2: Execute the COMPLETE DEMONSTRATION in GREEN (circles, intersection point, final segments)
+        - Step 3: Explain the conclusion
 
         **HANDLING CANVAS STATE:**
         - You will receive a detailed list of all existing points, shapes, and texts on the canvas

@@ -51,14 +51,15 @@ export const useChat = ({ activeWorkspace, setPoints, setShapes, setTexts, lang 
 
             if (fc.name === 'create_point') {
                 const realId = generateId();
-                const aiId = args.id; 
+                const aiId = args.id;
                 if (aiId) idMap[aiId] = realId;
 
                 newPoints[realId] = {
                     id: realId,
                     x: Number(args.x),
                     y: Number(args.y),
-                    label: args.label || ''
+                    label: args.label || '',
+                    color: args.color // Pass color from AI
                 };
             }
 
@@ -78,17 +79,18 @@ export const useChat = ({ activeWorkspace, setPoints, setShapes, setTexts, lang 
              if (fc.name === 'create_shape') {
                 const args = fc.args;
                 // Try to find ID in the new batch, otherwise check if it's a raw ID (unlikely from AI but possible)
-                const p1 = idMap[args.p1_id] || args.p1_id; 
+                const p1 = idMap[args.p1_id] || args.p1_id;
                 const p2 = idMap[args.p2_id] || args.p2_id;
 
-                // We don't check if p1 exists in 'activeWorkspace' here because React state 
+                // We don't check if p1 exists in 'activeWorkspace' here because React state
                 // hasn't updated yet. We trust the AI logic + our idMap.
                 if (p1 && p2) {
                     newShapes.push({
                         id: generateId(),
                         type: args.type,
                         p1: p1,
-                        p2: p2
+                        p2: p2,
+                        color: args.color // Pass color from AI
                     });
                 }
             }
