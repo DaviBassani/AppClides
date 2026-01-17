@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { askEuclides, GeminiResponse } from '../services/gemini';
+import { askEuclides, GeminiResponse, ChatMessage as GeminiChatMessage } from '../services/gemini';
 import { Workspace, Point, GeometricShape, TextLabel } from '../types';
 import { generateId } from '../utils/geometry';
 import { Language, t } from '../utils/i18n';
@@ -7,7 +7,7 @@ import { Language, t } from '../utils/i18n';
 export interface ChatMessage {
     role: 'user' | 'assistant';
     text: string;
-    debugInfo?: string; 
+    debugInfo?: string;
 }
 
 interface UseChatProps {
@@ -109,12 +109,20 @@ export const useChat = ({ activeWorkspace, setPoints, setShapes, setTexts, lang 
 
     const sendMessage = async (input: string) => {
         if (!input.trim() || isLoading) return;
-    
+
         setMessages(prev => [...prev, { role: 'user', text: input }]);
         setIsLoading(true);
-    
+
         try {
-          const response: GeminiResponse = await askEuclides(input, activeWorkspace, lang);
+          // Convert messages to Gemini format (exclude debugInfo, exclude initial greeting)
+          const historyForGemini: GeminiChatMessage[] = messages
+              .filter(msg => msg.text !== t[lang].chat.initialMessage) // Exclude initial greeting
+              .map(msg => ({
+                  role: msg.role,
+                  text: msg.text
+              }));
+
+          const response: GeminiResponse = await askEuclides(input, activeWorkspace, lang, historyForGemini);
           
           if (response.text) {
             setMessages(prev => [...prev, { 
