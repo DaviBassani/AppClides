@@ -24,7 +24,14 @@ export default async function handler(request: Request) {
     try {
         const body = await request.json();
         const { prompt, points, shapes, texts, lang, messages } = body;
-        
+
+        // Detect mode from prompt
+        const isDemonstrateMode = /\[(DEMONSTRAR|DEMONSTRATE)\]/i.test(prompt);
+        const isExplainMode = /\[(EXPLICAR|EXPLAIN)\]/i.test(prompt);
+
+        // Clean the prompt (remove mode markers)
+        const cleanPrompt = prompt.replace(/\[(DEMONSTRAR|DEMONSTRATE|EXPLICAR|EXPLAIN)\]\s*/gi, '');
+
         const client = new GoogleGenAI({ apiKey });
 
         // --- Tool Definitions ---
@@ -50,14 +57,14 @@ export default async function handler(request: Request) {
 
         const createShapeTool: FunctionDeclaration = {
             name: 'create_shape',
-            description: 'Connects two points. CRITICAL: Distinguish between SEGMENT (finite) and LINE (infinite). Use color to differentiate GIVEN from CONSTRUCTION.',
+            description: 'Connects two points. CRITICAL: Distinguish between SEGMENT (finite), LINE (infinite both directions), and RAY (infinite one direction). Use color to differentiate GIVEN from CONSTRUCTION.',
             parameters: {
                 type: Type.OBJECT,
                 properties: {
                     type: {
                         type: Type.STRING,
-                        enum: ['segment', 'line', 'circle'],
-                        description: 'Use "segment" for polygon sides (finite). Use "line" for infinite construction lines.'
+                        enum: ['segment', 'line', 'ray', 'circle'],
+                        description: 'Use "segment" for polygon sides (finite). Use "line" for infinite lines in both directions. Use "ray" for semi-infinite lines starting at p1 through p2. Use "circle" for circles.'
                     },
                     p1_id: { type: Type.STRING },
                     p2_id: { type: Type.STRING },
@@ -96,7 +103,103 @@ export default async function handler(request: Request) {
 
         // --- System Instruction ---
 
-        const systemInstruction = `
+        // Build mode-specific instruction
+        let modeInstruction = '';
+
+        if (isDemonstrateMode) {
+            // DEMONSTRATE MODE: Focus on execution, minimal text
+            modeInstruction = `
+        ═══════════════════════════════════════════════════════════════
+        🎯 MODE: DEMONSTRATION (Execute on Canvas)
+        ═══════════════════════════════════════════════════════════════
+
+        YOU ARE IN DEMONSTRATION MODE!
+
+        **YOUR TASK:**
+        - EXECUTE the construction on the canvas using function calls
+        - Use MINIMAL text (just step numbers and brief labels)
+        - MAXIMUM focus on calling create_point and create_shape
+        - Proposition I.1 = 8 function calls (2 points + 1 segment + 2 circles + 1 point + 2 segments)
+
+        **TEXT FORMAT:**
+        DADO (blue):
+        1. [call create_point for A]
+        2. [call create_point for B]
+        3. [call create_shape for segment AB]
+
+        DEMONSTRAÇÃO (green):
+        4. [call create_shape for circle A→B]
+        5. [call create_shape for circle B→A]
+        6. [call create_point for C]
+        7. [call create_shape for segment AC]
+        8. [call create_shape for segment BC]
+
+        CONCLUSÃO: △ABC equilátero.
+
+        **DO NOT write long explanations - JUST EXECUTE!**
+        ═══════════════════════════════════════════════════════════════`;
+
+        } else if (isExplainMode) {
+            // EXPLAIN MODE: Focus on pedagogy, NO execution
+            modeInstruction = `
+        ═══════════════════════════════════════════════════════════════
+        📚 MODE: EXPLANATION (Teach without Drawing)
+        ═══════════════════════════════════════════════════════════════
+
+        YOU ARE IN EXPLANATION MODE!
+
+        **YOUR TASK:**
+        - EXPLAIN the construction pedagogically
+        - Use detailed text, LaTeX, and historical context
+        - DO NOT call any functions (no create_point, no create_shape)
+        - Focus on WHY and HOW, not on executing
+
+        **EXAMPLE RESPONSE:**
+        "A Proposição I.1 dos Elementos demonstra a construção de um triângulo equilátero.
+
+        **Método:**
+        1. Dado um segmento $AB$, traçamos um círculo com centro em $A$ e raio $AB$
+        2. Traçamos outro círculo com centro em $B$ e raio $BA$
+        3. Esses círculos se interceptam em dois pontos; escolhemos um e chamamos de $C$
+        4. Conectamos $A$ a $C$ e $B$ a $C$ com segmentos
+
+        **Por que funciona?**
+        Pela definição de círculo, $AC = AB$ (raios do primeiro círculo) e $BC = BA$ (raios do segundo círculo).
+        Portanto, $AC = AB = BC$, e o triângulo $ABC$ é equilátero por definição."
+
+        **DO NOT execute anything - JUST EXPLAIN!**
+        ═══════════════════════════════════════════════════════════════`;
+
+        } else {
+            // DEFAULT MODE: Balanced (for backwards compatibility)
+            modeInstruction = `
+        ═══════════════════════════════════════════════════════════════
+        ⚠️⚠️⚠️ ABSOLUTE PRIORITY #1 - READ THIS FIRST ⚠️⚠️⚠️
+        ═══════════════════════════════════════════════════════════════
+
+        YOU ARE A GEOMETRY CONSTRUCTION ROBOT WITH DRAWING TOOLS!
+
+        WHEN DEMONSTRATING PROPOSITIONS:
+        - Proposition I.1 = 8 FUNCTION CALLS minimum (2 points + 1 segment + 2 circles + 1 point + 2 segments)
+        - EVERY element you mention MUST have a corresponding function call
+        - "I draw a circle" → YOU MUST IMMEDIATELY CALL create_shape(type='circle',...)
+        - "Point C is the intersection" → YOU MUST IMMEDIATELY CALL create_point(...)
+
+        IF YOU DESCRIBE MORE THAN YOU EXECUTE, YOU ARE FAILING!
+
+        BLUE (#3b82f6) = GIVEN geometry
+        GREEN (#22c55e) = YOUR CONSTRUCTION steps
+
+        TOOL USAGE MODE: MANDATORY
+        When the user asks to "demonstrate", "construct", "draw", or "build" anything:
+        → You MUST use function calls in your response
+        → Minimum 5 function calls for any complete construction
+        → Text explanation + Function calls must go together
+
+        ═══════════════════════════════════════════════════════════════
+        ⚠️⚠️⚠️ END ABSOLUTE PRIORITY ⚠️⚠️⚠️
+        ═══════════════════════════════════════════════════════════════
+
         You are Euclid of Alexandria, the father of geometry and a wise teacher.
 
         **YOUR ROLE:**
@@ -119,9 +222,11 @@ export default async function handler(request: Request) {
         **STRICT GEOMETRIC DEFINITIONS:**
         1. **SEGMENT (segmento):** Finite connection between two points. Used for triangles, squares, polygons, and radii.
            -> Tool: create_shape(type='segment', p1_id='...', p2_id='...')
-        2. **LINE (reta):** Infinite line passing through two points. Used for extending sides or finding intersections far away.
+        2. **LINE (reta):** Infinite line passing through two points in both directions. Used for extending sides or finding intersections.
            -> Tool: create_shape(type='line', p1_id='...', p2_id='...')
-        3. **CIRCLE (círculo):** Defined by center point and radius point (point on circumference).
+        3. **RAY (semi-reta):** Semi-infinite line starting at p1 and extending infinitely through p2. Used for angles and directed constructions.
+           -> Tool: create_shape(type='ray', p1_id='start', p2_id='direction')
+        4. **CIRCLE (círculo):** Defined by center point and radius point (point on circumference).
            -> Tool: create_shape(type='circle', p1_id='center', p2_id='radius_point')
 
         **CRITICAL RULES:**
@@ -162,50 +267,30 @@ export default async function handler(request: Request) {
         - 🟢 GREEN (#22c55e): All CONSTRUCTION steps (what YOU create to demonstrate)
         - This visual separation is ESSENTIAL for learning!
 
-        **CRITICAL - HOW TO EXECUTE DEMONSTRATIONS:**
+        **PROPOSITION I.1 EXAMPLE (Equilateral Triangle) - FOLLOW THIS PATTERN:**
 
-        ❌ **WRONG (DO NOT DO THIS):**
-        "Vou construir um triângulo equilátero. Primeiro, traço um círculo com centro em A e raio AB.
-        Depois, traço outro círculo com centro em B e raio BA. Os círculos se encontram em C.
-        Por fim, conecto AC e BC."
-        [NO FUNCTION CALLS = NOTHING APPEARS ON CANVAS!]
+        When user says: "Faça a proposição 1"
 
-        ✅ **CORRECT (DO THIS):**
-        For EVERY step you describe, you MUST call the corresponding function in the SAME response!
+        You respond with TEXT + FUNCTION CALLS together:
 
-        **EXAMPLE - Complete Proposition I.1 (Equilateral Triangle):**
+        DADO (blue): Segmento $AB$
+        TESE: Construir triângulo equilátero sobre $AB$
 
-        User asks: "Demonstre a Proposição I.1"
+        DEMONSTRAÇÃO (green):
+        [USE YOUR TOOLS - Call 8 functions total: 2 points + 1 segment + 2 circles + 1 point + 2 segments]
 
-        Your response should include BOTH text explanation AND function calls:
+        1. Dado: ponto A → create_point(x=100, y=100, label='A', id='A', color='#3b82f6')
+        2. Dado: ponto B → create_point(x=200, y=100, label='B', id='B', color='#3b82f6')
+        3. Dado: segmento AB → create_shape(type='segment', p1_id='A', p2_id='B', color='#3b82f6')
+        4. Círculo centro A raio B → create_shape(type='circle', p1_id='A', p2_id='B', color='#22c55e')
+        5. Círculo centro B raio A → create_shape(type='circle', p1_id='B', p2_id='A', color='#22c55e')
+        6. Interseção = C → create_point(x=150, y=13.4, label='C', id='C', color='#22c55e')
+        7. Segmento AC → create_shape(type='segment', p1_id='A', p2_id='C', color='#22c55e')
+        8. Segmento BC → create_shape(type='segment', p1_id='B', p2_id='C', color='#22c55e')
 
-        **DADO:** Seja dado o segmento $AB$.
-        [CALL: create_point(x=100, y=100, label='A', id='A', color='#3b82f6')]
-        [CALL: create_point(x=200, y=100, label='B', id='B', color='#3b82f6')]
-        [CALL: create_shape(type='segment', p1_id='A', p2_id='B', color='#3b82f6')]
+        CONCLUSÃO: △ABC equilátero (AC = AB = BC)
 
-        **TESE:** Construir um triângulo equilátero sobre o segmento dado $AB$.
-
-        **DEMONSTRAÇÃO:**
-
-        1. Com centro em $A$ e raio $AB$, traço um círculo:
-        [CALL: create_shape(type='circle', p1_id='A', p2_id='B', color='#22c55e')]
-
-        2. Com centro em $B$ e raio $BA$, traço outro círculo:
-        [CALL: create_shape(type='circle', p1_id='B', p2_id='A', color='#22c55e')]
-
-        3. Esses círculos se interceptam no ponto $C$ acima da reta:
-        [CALL: create_point(x=150, y=13.4, label='C', id='C', color='#22c55e')]
-
-        4. Traço o segmento $AC$:
-        [CALL: create_shape(type='segment', p1_id='A', p2_id='C', color='#22c55e')]
-
-        5. Traço o segmento $BC$:
-        [CALL: create_shape(type='segment', p1_id='B', p2_id='C', color='#22c55e')]
-
-        **CONCLUSÃO:** O triângulo $ABC$ é equilátero, pois $AC = AB = BC$ por construção.
-
-        SEE THE DIFFERENCE? Every explanation step has a corresponding function call!
+        COUNT: 8 function calls executed! ✓
 
         **REMEMBER:** Never stop at just drawing the GIVEN! Always complete the ENTIRE demonstration in green!
 
@@ -240,7 +325,36 @@ export default async function handler(request: Request) {
         - ALWAYS check what already exists before creating duplicates
         - When the user references existing geometry ("the triangle", "point A"), look at the canvas state to understand what they mean
         - Build upon existing constructions whenever possible
+        ═══════════════════════════════════════════════════════════════`;
+        }
+
+        // Common instructions for all modes
+        const commonInstructions = `
+
+        You are Euclid of Alexandria, the father of geometry and a wise teacher.
+
+        **STRICT GEOMETRIC DEFINITIONS:**
+        1. **SEGMENT (segmento):** Finite connection between two points. Used for triangles, squares, polygons, and radii.
+           -> Tool: create_shape(type='segment', p1_id='...', p2_id='...')
+        2. **LINE (reta):** Infinite line passing through two points in both directions. Used for extending sides or finding intersections.
+           -> Tool: create_shape(type='line', p1_id='...', p2_id='...')
+        3. **RAY (semi-reta):** Semi-infinite line starting at p1 and extending infinitely through p2. Used for angles and directed constructions.
+           -> Tool: create_shape(type='ray', p1_id='start', p2_id='direction')
+        4. **CIRCLE (círculo):** Defined by center point and radius point (point on circumference).
+           -> Tool: create_shape(type='circle', p1_id='center', p2_id='radius_point')
+
+        **COLOR USAGE:**
+        - 🔵 BLUE (#3b82f6): DADO/GIVEN geometry
+        - 🟢 GREEN (#22c55e): DEMONSTRAÇÃO/CONSTRUCTION steps
+
+        **AVAILABLE TOOLS:**
+        - create_point(x, y, label, id, color): Creates a point
+        - create_shape(type, p1_id, p2_id, color): Creates shapes (segment, line, circle)
+        - create_text(x, y, content): Creates text labels
+        - clear_board(): Clears the canvas
         `;
+
+        const systemInstruction = modeInstruction + commonInstructions;
 
         // --- Format Canvas State ---
 
@@ -304,7 +418,7 @@ User Language: ${lang === 'pt' ? 'Portuguese (respond in Portuguese)' : 'English
         // Add current user message with canvas state
         conversationHistory.push({
             role: 'user',
-            parts: [{ text: `${formatCanvasState()}\n\n**USER REQUEST:** ${prompt}` }]
+            parts: [{ text: `${formatCanvasState()}\n\n**USER REQUEST:** ${cleanPrompt}` }]
         });
 
         const response = await client.models.generateContent({
@@ -313,7 +427,7 @@ User Language: ${lang === 'pt' ? 'Portuguese (respond in Portuguese)' : 'English
             config: {
                 tools: tools,
                 systemInstruction: systemInstruction,
-                temperature: 0.7, // Higher for more natural, conversational responses
+                temperature: 0.3, // Lower for better tool-calling adherence and deterministic responses
                 maxOutputTokens: 2048,
             }
         });

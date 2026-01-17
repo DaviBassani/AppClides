@@ -71,6 +71,32 @@ export const getLineEnds = (p1: { x: number; y: number }, p2: { x: number; y: nu
   return { x1, y1, x2, y2 };
 };
 
+// Get ray endpoints (start at p1, extend infinitely through p2)
+export const getRayEnd = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+
+  if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+    // Points are the same, extend arbitrarily to the right
+    return { x1: p1.x, y1: p1.y, x2: 10000, y2: p1.y };
+  }
+
+  if (Math.abs(dx) < 0.001) {
+    // Vertical ray
+    const direction = dy > 0 ? 1 : -1;
+    return { x1: p1.x, y1: p1.y, x2: p1.x, y2: p1.y + direction * 20000 };
+  }
+
+  // Calculate slope and extend in the direction of p2
+  const m = dy / dx;
+  const direction = dx > 0 ? 1 : -1;
+
+  const x2 = p1.x + direction * 20000;
+  const y2 = p1.y + m * (x2 - p1.x);
+
+  return { x1: p1.x, y1: p1.y, x2, y2 };
+};
+
 // --- Projection Logic (Snap to Shape) ---
 
 interface Point2D { x: number; y: number; }
