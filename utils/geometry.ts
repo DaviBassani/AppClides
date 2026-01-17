@@ -19,6 +19,7 @@ export const findNearestPoint = (
 
   Object.values(points).forEach((p) => {
     if (excludeId && p.id === excludeId) return;
+    if (p.hidden) return; // Skip hidden direction points
     const d = distance({ x, y }, p);
     if (d < minDist) {
       minDist = d;
