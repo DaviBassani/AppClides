@@ -3,6 +3,7 @@ export enum ToolType {
   POINT = 'POINT',
   SEGMENT = 'SEGMENT',
   LINE = 'LINE',
+  RAY = 'RAY',
   CIRCLE = 'CIRCLE',
   TEXT = 'TEXT',
   ERASER = 'ERASER'
