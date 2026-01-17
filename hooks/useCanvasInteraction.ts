@@ -356,7 +356,7 @@ export const useCanvasInteraction = ({
 
   const handleMouseUp = (e: React.MouseEvent) => {
     // "Drag-to-Create" logic
-    if (draftStartId && !isPanning && !draggingId && (tool === ToolType.SEGMENT || tool === ToolType.LINE || tool === ToolType.CIRCLE)) {
+    if (draftStartId && !isPanning && !draggingId && (tool === ToolType.SEGMENT || tool === ToolType.LINE || tool === ToolType.RAY || tool === ToolType.CIRCLE)) {
         finalizeDraft(e.clientX, e.clientY);
     }
 
@@ -448,7 +448,7 @@ export const useCanvasInteraction = ({
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchRef.current.mode === 'drawing' && draftStartId && !draggingId && (tool === ToolType.SEGMENT || tool === ToolType.LINE || tool === ToolType.CIRCLE)) {
+    if (touchRef.current.mode === 'drawing' && draftStartId && !draggingId && (tool === ToolType.SEGMENT || tool === ToolType.LINE || tool === ToolType.RAY || tool === ToolType.CIRCLE)) {
         const t = e.changedTouches[0];
         if (t) finalizeDraft(t.clientX, t.clientY);
     }
