@@ -321,12 +321,9 @@ export const useCanvasInteraction = ({
               if (snappedId) {
                   targetId = snappedId;
               } else {
-                  // Create a temporary invisible point just for direction
-                  // This point won't be added to the visible points
+                  // Create a hidden point just for direction (won't be rendered)
                   targetId = generateId();
-                  // Store it temporarily for the shape to reference
-                  const tempPoint: Point = { id: targetId, x, y };
-                  // Add to points temporarily just for the shape reference
+                  const tempPoint: Point = { id: targetId, x, y, hidden: true };
                   setPoints(prev => ({ ...prev, [targetId]: tempPoint }));
               }
           } else {

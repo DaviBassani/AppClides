@@ -174,8 +174,8 @@ const Canvas: React.FC<CanvasProps> = ({
                />
             )}
 
-            {/* Render Points */}
-            {Object.values(points).map((p: Point) => (
+            {/* Render Points (excluding hidden direction points) */}
+            {Object.values(points).filter(p => !p.hidden).map((p: Point) => (
                 <PointRenderer
                     key={p.id}
                     point={p}

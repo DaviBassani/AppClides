@@ -15,6 +15,7 @@ export interface Point {
   y: number;
   label?: string;
   color?: string;
+  hidden?: boolean; // For direction points in LINE/RAY that shouldn't be rendered
 }
 
 export interface TextLabel {
