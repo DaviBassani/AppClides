@@ -7,7 +7,17 @@ export interface GeminiResponse {
     errorDetails?: string;
 }
 
-export const askEuclides = async (prompt: string, currentWorkspace: Workspace, lang: Language): Promise<GeminiResponse> => {
+export interface ChatMessage {
+    role: 'user' | 'assistant';
+    text: string;
+}
+
+export const askEuclides = async (
+    prompt: string,
+    currentWorkspace: Workspace,
+    lang: Language,
+    messages: ChatMessage[] = []
+): Promise<GeminiResponse> => {
     try {
         // We now call the Vercel Serverless Function instead of the SDK directly
         const response = await fetch('/api/chat', {
@@ -20,7 +30,8 @@ export const askEuclides = async (prompt: string, currentWorkspace: Workspace, l
                 points: currentWorkspace.points,
                 shapes: currentWorkspace.shapes,
                 texts: currentWorkspace.texts,
-                lang
+                lang,
+                messages // Send conversation history
             }),
         });
 
