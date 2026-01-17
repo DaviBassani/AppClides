@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, ChevronDown, AlertTriangle } from 'lucide-react';
+import { Send, Sparkles, ChevronDown, AlertTriangle, Play, BookOpen } from 'lucide-react';
 import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -107,8 +107,28 @@ const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, setT
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Suggestion Buttons */}
+      <div className="px-3 pt-3 pb-2 bg-white border-t border-slate-100 flex gap-2 shrink-0">
+        <button
+          onClick={() => setInput(lang === 'pt' ? '[DEMONSTRAR] Proposição I.1' : '[DEMONSTRATE] Proposition I.1')}
+          disabled={isLoading}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-green-200"
+        >
+          <Play size={14} />
+          <span>{lang === 'pt' ? 'Demonstrar' : 'Demonstrate'}</span>
+        </button>
+        <button
+          onClick={() => setInput(lang === 'pt' ? '[EXPLICAR] Proposição I.1' : '[EXPLAIN] Proposition I.1')}
+          disabled={isLoading}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-blue-200"
+        >
+          <BookOpen size={14} />
+          <span>{lang === 'pt' ? 'Explicar' : 'Explain'}</span>
+        </button>
+      </div>
+
       {/* Input */}
-      <div className="p-3 bg-white border-t border-slate-100 flex gap-2 shrink-0 pb-safe">
+      <div className="px-3 pb-3 bg-white flex gap-2 shrink-0 pb-safe">
         <input
           type="text"
           value={input}
@@ -117,7 +137,7 @@ const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, setT
           placeholder={t[lang].chat.placeholder}
           className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-900 focus:outline-none placeholder:text-slate-400"
         />
-        <button 
+        <button
           onClick={handleSend}
           disabled={!input.trim() || isLoading}
           className="bg-indigo-900 hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-xl transition-colors flex items-center justify-center w-12 h-12"

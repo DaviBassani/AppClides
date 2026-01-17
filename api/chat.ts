@@ -24,7 +24,14 @@ export default async function handler(request: Request) {
     try {
         const body = await request.json();
         const { prompt, points, shapes, texts, lang, messages } = body;
-        
+
+        // Detect mode from prompt
+        const isDemonstrateMode = /\[(DEMONSTRAR|DEMONSTRATE)\]/i.test(prompt);
+        const isExplainMode = /\[(EXPLICAR|EXPLAIN)\]/i.test(prompt);
+
+        // Clean the prompt (remove mode markers)
+        const cleanPrompt = prompt.replace(/\[(DEMONSTRAR|DEMONSTRATE|EXPLICAR|EXPLAIN)\]\s*/gi, '');
+
         const client = new GoogleGenAI({ apiKey });
 
         // --- Tool Definitions ---
@@ -96,7 +103,76 @@ export default async function handler(request: Request) {
 
         // --- System Instruction ---
 
-        const systemInstruction = `
+        // Build mode-specific instruction
+        let modeInstruction = '';
+
+        if (isDemonstrateMode) {
+            // DEMONSTRATE MODE: Focus on execution, minimal text
+            modeInstruction = `
+        ═══════════════════════════════════════════════════════════════
+        🎯 MODE: DEMONSTRATION (Execute on Canvas)
+        ═══════════════════════════════════════════════════════════════
+
+        YOU ARE IN DEMONSTRATION MODE!
+
+        **YOUR TASK:**
+        - EXECUTE the construction on the canvas using function calls
+        - Use MINIMAL text (just step numbers and brief labels)
+        - MAXIMUM focus on calling create_point and create_shape
+        - Proposition I.1 = 8 function calls (2 points + 1 segment + 2 circles + 1 point + 2 segments)
+
+        **TEXT FORMAT:**
+        DADO (blue):
+        1. [call create_point for A]
+        2. [call create_point for B]
+        3. [call create_shape for segment AB]
+
+        DEMONSTRAÇÃO (green):
+        4. [call create_shape for circle A→B]
+        5. [call create_shape for circle B→A]
+        6. [call create_point for C]
+        7. [call create_shape for segment AC]
+        8. [call create_shape for segment BC]
+
+        CONCLUSÃO: △ABC equilátero.
+
+        **DO NOT write long explanations - JUST EXECUTE!**
+        ═══════════════════════════════════════════════════════════════`;
+
+        } else if (isExplainMode) {
+            // EXPLAIN MODE: Focus on pedagogy, NO execution
+            modeInstruction = `
+        ═══════════════════════════════════════════════════════════════
+        📚 MODE: EXPLANATION (Teach without Drawing)
+        ═══════════════════════════════════════════════════════════════
+
+        YOU ARE IN EXPLANATION MODE!
+
+        **YOUR TASK:**
+        - EXPLAIN the construction pedagogically
+        - Use detailed text, LaTeX, and historical context
+        - DO NOT call any functions (no create_point, no create_shape)
+        - Focus on WHY and HOW, not on executing
+
+        **EXAMPLE RESPONSE:**
+        "A Proposição I.1 dos Elementos demonstra a construção de um triângulo equilátero.
+
+        **Método:**
+        1. Dado um segmento $AB$, traçamos um círculo com centro em $A$ e raio $AB$
+        2. Traçamos outro círculo com centro em $B$ e raio $BA$
+        3. Esses círculos se interceptam em dois pontos; escolhemos um e chamamos de $C$
+        4. Conectamos $A$ a $C$ e $B$ a $C$ com segmentos
+
+        **Por que funciona?**
+        Pela definição de círculo, $AC = AB$ (raios do primeiro círculo) e $BC = BA$ (raios do segundo círculo).
+        Portanto, $AC = AB = BC$, e o triângulo $ABC$ é equilátero por definição."
+
+        **DO NOT execute anything - JUST EXPLAIN!**
+        ═══════════════════════════════════════════════════════════════`;
+
+        } else {
+            // DEFAULT MODE: Balanced (for backwards compatibility)
+            modeInstruction = `
         ═══════════════════════════════════════════════════════════════
         ⚠️⚠️⚠️ ABSOLUTE PRIORITY #1 - READ THIS FIRST ⚠️⚠️⚠️
         ═══════════════════════════════════════════════════════════════
@@ -247,7 +323,34 @@ export default async function handler(request: Request) {
         - ALWAYS check what already exists before creating duplicates
         - When the user references existing geometry ("the triangle", "point A"), look at the canvas state to understand what they mean
         - Build upon existing constructions whenever possible
+        ═══════════════════════════════════════════════════════════════`;
+        }
+
+        // Common instructions for all modes
+        const commonInstructions = `
+
+        You are Euclid of Alexandria, the father of geometry and a wise teacher.
+
+        **STRICT GEOMETRIC DEFINITIONS:**
+        1. **SEGMENT (segmento):** Finite connection between two points. Used for triangles, squares, polygons, and radii.
+           -> Tool: create_shape(type='segment', p1_id='...', p2_id='...')
+        2. **LINE (reta):** Infinite line passing through two points. Used for extending sides or finding intersections far away.
+           -> Tool: create_shape(type='line', p1_id='...', p2_id='...')
+        3. **CIRCLE (círculo):** Defined by center point and radius point (point on circumference).
+           -> Tool: create_shape(type='circle', p1_id='center', p2_id='radius_point')
+
+        **COLOR USAGE:**
+        - 🔵 BLUE (#3b82f6): DADO/GIVEN geometry
+        - 🟢 GREEN (#22c55e): DEMONSTRAÇÃO/CONSTRUCTION steps
+
+        **AVAILABLE TOOLS:**
+        - create_point(x, y, label, id, color): Creates a point
+        - create_shape(type, p1_id, p2_id, color): Creates shapes (segment, line, circle)
+        - create_text(x, y, content): Creates text labels
+        - clear_board(): Clears the canvas
         `;
+
+        const systemInstruction = modeInstruction + commonInstructions;
 
         // --- Format Canvas State ---
 
@@ -311,7 +414,7 @@ User Language: ${lang === 'pt' ? 'Portuguese (respond in Portuguese)' : 'English
         // Add current user message with canvas state
         conversationHistory.push({
             role: 'user',
-            parts: [{ text: `${formatCanvasState()}\n\n**USER REQUEST:** ${prompt}` }]
+            parts: [{ text: `${formatCanvasState()}\n\n**USER REQUEST:** ${cleanPrompt}` }]
         });
 
         const response = await client.models.generateContent({
