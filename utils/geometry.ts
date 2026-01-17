@@ -161,6 +161,8 @@ export const getNearestPointOnShape = (
         proj = projectOnLine({ x, y }, p1, p2, true);
     } else if (shape.type === 'line') {
         proj = projectOnLine({ x, y }, p1, p2, false);
+    } else if (shape.type === 'ray') {
+        proj = projectOnLine({ x, y }, p1, p2, false); // Treat like line for selection purposes
     } else if (shape.type === 'circle') {
         proj = projectOnCircle({ x, y }, p1, p2);
     } else {
