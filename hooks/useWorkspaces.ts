@@ -208,6 +208,26 @@ export const useWorkspaces = () => {
     }));
   }, [activeWorkspace, saveSnapshot]);
 
+  const batchUpdate = useCallback((updates: {
+    points?: Record<string, Point>;
+    shapes?: GeometricShape[];
+    texts?: Record<string, TextLabel>;
+  }) => {
+    const targetId = activeWorkspace.id;
+    
+    saveSnapshot(targetId, activeWorkspace.points, activeWorkspace.shapes, activeWorkspace.texts || {});
+
+    setWorkspaces(prev => prev.map(ws => {
+      if (ws.id !== targetId) return ws;
+      return {
+        ...ws,
+        points: updates.points !== undefined ? updates.points : ws.points,
+        shapes: updates.shapes !== undefined ? updates.shapes : ws.shapes,
+        texts: updates.texts !== undefined ? updates.texts : ws.texts
+      };
+    }));
+  }, [activeWorkspace, saveSnapshot]);
+
 
   const clearActiveWorkspace = useCallback(() => {
     const targetId = activeWorkspace.id;
@@ -302,7 +322,7 @@ export const useWorkspaces = () => {
   return {
     workspaces,
     activeWorkspaceId,
-    activeWorkspace, // Make sure to consume activeWorkspace from the hook to get the fallback
+    activeWorkspace,
     setActiveWorkspaceId,
     addWorkspace,
     removeWorkspace,
@@ -310,11 +330,11 @@ export const useWorkspaces = () => {
     updatePoints,
     updateShapes,
     updateTexts,
+    batchUpdate,
     clearActiveWorkspace,
     deleteSelection,
     undo,
     redo,
-    // Use targetId to check history availability
     canUndo: (history[activeWorkspace.id]?.past.length || 0) > 0,
     canRedo: (history[activeWorkspace.id]?.future.length || 0) > 0
   };

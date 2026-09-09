@@ -8,6 +8,7 @@ export interface ChatMessage {
     role: 'user' | 'assistant';
     text: string;
     debugInfo?: string;
+    functionCalls?: any[];
 }
 
 interface UseChatProps {
@@ -15,10 +16,15 @@ interface UseChatProps {
     setPoints: React.Dispatch<React.SetStateAction<Record<string, Point>>>;
     setShapes: React.Dispatch<React.SetStateAction<GeometricShape[]>>;
     setTexts?: React.Dispatch<React.SetStateAction<Record<string, TextLabel>>>;
+    batchUpdate?: (updates: {
+        points?: Record<string, Point>;
+        shapes?: GeometricShape[];
+        texts?: Record<string, TextLabel>;
+    }) => void;
     lang: Language;
 }
 
-export const useChat = ({ activeWorkspace, setPoints, setShapes, setTexts, lang }: UseChatProps) => {
+export const useChat = ({ activeWorkspace, setPoints, setShapes, setTexts, batchUpdate, lang }: UseChatProps) => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     
     useEffect(() => {
@@ -34,14 +40,12 @@ export const useChat = ({ activeWorkspace, setPoints, setShapes, setTexts, lang 
     
         const idMap: Record<string, string> = {};
         
-        // Temporary batch containers
         const newPoints: Record<string, Point> = {};
         const newShapes: GeometricShape[] = [];
         const newTexts: Record<string, TextLabel> = {};
         let shouldClear = false;
     
         // 1. First Pass: Create Points and handle Clears
-        // We process points first so IDs are available for shapes
         functionCalls.forEach(fc => {
             const args = fc.args;
             
@@ -59,7 +63,7 @@ export const useChat = ({ activeWorkspace, setPoints, setShapes, setTexts, lang 
                     x: Number(args.x),
                     y: Number(args.y),
                     label: args.label || '',
-                    color: args.color // Pass color from AI
+                    color: args.color
                 };
             }
 
@@ -78,19 +82,19 @@ export const useChat = ({ activeWorkspace, setPoints, setShapes, setTexts, lang 
         functionCalls.forEach(fc => {
              if (fc.name === 'create_shape') {
                 const args = fc.args;
-                // Try to find ID in the new batch, otherwise check if it's a raw ID (unlikely from AI but possible)
                 const p1 = idMap[args.p1_id] || args.p1_id;
                 const p2 = idMap[args.p2_id] || args.p2_id;
 
-                // We don't check if p1 exists in 'activeWorkspace' here because React state
-                // hasn't updated yet. We trust the AI logic + our idMap.
-                if (p1 && p2) {
+                // Validate that referenced points exist (either in current workspace or in the new batch)
+                const p1Exists = activeWorkspace.points[p1] || newPoints[p1];
+                const p2Exists = activeWorkspace.points[p2] || newPoints[p2];
+                if (p1 && p2 && p1Exists && p2Exists) {
                     newShapes.push({
                         id: generateId(),
                         type: args.type,
                         p1: p1,
                         p2: p2,
-                        color: args.color // Pass color from AI
+                        color: args.color
                     });
                 }
             }
@@ -98,14 +102,25 @@ export const useChat = ({ activeWorkspace, setPoints, setShapes, setTexts, lang 
 
         // 3. Batch Updates
         if (shouldClear) {
-            setPoints(newPoints);
-            setShapes(newShapes);
-            if (setTexts) setTexts(newTexts);
+            if (batchUpdate) {
+                batchUpdate({ points: newPoints, shapes: newShapes, texts: newTexts });
+            } else {
+                setPoints(newPoints);
+                setShapes(newShapes);
+                if (setTexts) setTexts(newTexts);
+            }
         } else {
-            // Merge with previous state
-            setPoints(prev => ({ ...prev, ...newPoints }));
-            setShapes(prev => [...prev, ...newShapes]);
-            if (setTexts) setTexts(prev => ({ ...prev, ...newTexts }));
+            if (batchUpdate) {
+                batchUpdate({
+                    points: { ...activeWorkspace.points, ...newPoints },
+                    shapes: [...activeWorkspace.shapes, ...newShapes],
+                    texts: setTexts ? { ...(activeWorkspace.texts || {}), ...newTexts } : undefined
+                });
+            } else {
+                setPoints(prev => ({ ...prev, ...newPoints }));
+                setShapes(prev => [...prev, ...newShapes]);
+                if (setTexts) setTexts(prev => ({ ...prev, ...newTexts }));
+            }
         }
     };
 
@@ -118,22 +133,31 @@ export const useChat = ({ activeWorkspace, setPoints, setShapes, setTexts, lang 
         try {
           // Convert messages to Gemini format (exclude debugInfo, exclude initial greeting)
           const historyForGemini: GeminiChatMessage[] = messages
-              .filter(msg => msg.text !== t[lang].chat.initialMessage) // Exclude initial greeting
+              .filter(msg => msg.text !== t[lang].chat.initialMessage)
               .map(msg => ({
                   role: msg.role,
-                  text: msg.text
+                  text: msg.text,
+                  functionCalls: msg.functionCalls
               }));
 
           const response: GeminiResponse = await askEuclides(input, activeWorkspace, lang, historyForGemini);
+          
+          // Store the AI response with its function calls for history
+          const assistantMessage: ChatMessage = {
+              role: 'assistant',
+              text: response.text || '',
+              functionCalls: response.functionCalls
+          };
           
           if (response.text) {
             setMessages(prev => [...prev, { 
                 role: 'assistant', 
                 text: response.text,
-                debugInfo: response.errorDetails 
+                debugInfo: response.errorDetails,
+                functionCalls: response.functionCalls
             }]);
           }
-    
+     
           if (response.functionCalls && response.functionCalls.length > 0) {
             executeFunctionCalls(response.functionCalls);
             
@@ -141,12 +165,12 @@ export const useChat = ({ activeWorkspace, setPoints, setShapes, setTexts, lang 
                  const doneMsg = lang === 'pt' 
                     ? "Realizei as construções solicitadas no quadro." 
                     : "I have performed the requested constructions on the board.";
-                 setMessages(prev => [...prev, { role: 'assistant', text: doneMsg }]);
+                 setMessages(prev => [...prev, { role: 'assistant', text: doneMsg, functionCalls: response.functionCalls }]);
             }
           } else if (!response.text && !response.functionCalls) {
-               setMessages(prev => [...prev, { role: 'assistant', text: "..." }]);
+               setMessages(prev => [...prev, { role: 'assistant', text: "...", functionCalls: [] }]);
           }
-    
+     
         } catch (error) {
           setMessages(prev => [...prev, { role: 'assistant', text: t[lang].chat.error }]);
         } finally {

@@ -28,7 +28,7 @@ const App: React.FC = () => {
   const {
     workspaces, activeWorkspaceId, activeWorkspace, setActiveWorkspaceId,
     addWorkspace, removeWorkspace, renameWorkspace,
-    updatePoints, updateShapes, updateTexts, clearActiveWorkspace, deleteSelection,
+    updatePoints, updateShapes, updateTexts, batchUpdate, clearActiveWorkspace, deleteSelection,
     undo, redo, canUndo, canRedo
   } = useWorkspaces();
 
@@ -163,6 +163,7 @@ const App: React.FC = () => {
         setPoints={updatePoints}
         setShapes={updateShapes}
         setTexts={updateTexts}
+        batchUpdate={batchUpdate}
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
         lang={lang}

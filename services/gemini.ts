@@ -10,6 +10,7 @@ export interface GeminiResponse {
 export interface ChatMessage {
     role: 'user' | 'assistant';
     text: string;
+    functionCalls?: any[];
 }
 
 export const askEuclides = async (

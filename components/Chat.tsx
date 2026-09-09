@@ -13,13 +13,18 @@ interface ChatProps {
   setPoints: React.Dispatch<React.SetStateAction<Record<string, Point>>>;
   setShapes: React.Dispatch<React.SetStateAction<GeometricShape[]>>;
   setTexts?: React.Dispatch<React.SetStateAction<Record<string, TextLabel>>>;
+  batchUpdate?: (updates: {
+    points?: Record<string, Point>;
+    shapes?: GeometricShape[];
+    texts?: Record<string, TextLabel>;
+  }) => void;
   isOpen: boolean;
   onClose: () => void;
   lang: Language;
 }
 
-const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, setTexts, isOpen, onClose, lang }) => {
-  const { messages, isLoading, sendMessage } = useChat({ activeWorkspace, setPoints, setShapes, setTexts, lang });
+const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, setTexts, batchUpdate, isOpen, onClose, lang }) => {
+  const { messages, isLoading, sendMessage } = useChat({ activeWorkspace, setPoints, setShapes, setTexts, batchUpdate, lang });
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
