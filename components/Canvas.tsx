@@ -139,7 +139,7 @@ const Canvas: React.FC<CanvasProps> = ({
         
         <g transform={`translate(${view.x}, ${view.y}) scale(${view.k})`}>
             {/* Grid */}
-            <Grid size={20} show={showGrid} axisWidth={axisWidth} visualScale={visualScale} />
+            <Grid size={20} show={showGrid} axisWidth={axisWidth} visualScale={visualScale} viewportBounds={viewportBounds} />
 
             {/* Render Existing Shapes */}
             {shapes.map(shape => {
