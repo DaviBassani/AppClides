@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { ToolType, Point, GeometricShape, TextLabel } from '../types';
 import clsx from 'clsx';
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction';
@@ -9,6 +9,7 @@ import TextRenderer from './canvas/TextRenderer';
 import StyleMenu from './StyleMenu';
 import Loupe from './canvas/Loupe';
 import { Language, t } from '../utils/i18n';
+import { getViewportBounds, ViewportBounds } from '../utils/geometry';
 
 interface CanvasProps {
   tool: ToolType;
@@ -94,6 +95,24 @@ const Canvas: React.FC<CanvasProps> = ({
   const axisWidth = 1.5 * visualScale;
   const intersectionRadius = 3 * visualScale;
 
+  // Viewport bounds in world coordinates for clipping infinite lines/rays
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const updateSize = () => setContainerSize({ width: el.clientWidth, height: el.clientHeight });
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const viewportBounds: ViewportBounds = useMemo(
+    () => getViewportBounds(view, containerSize.width, containerSize.height),
+    [view, containerSize.width, containerSize.height]
+  );
+
   const instructions = t[lang].canvas.instructions;
 
   return (
@@ -128,13 +147,14 @@ const Canvas: React.FC<CanvasProps> = ({
                 const p2 = points[shape.p2];
                 if (!p1 || !p2) return null;
                 return (
-                    <ShapeRenderer 
-                        key={shape.id} 
-                        shape={shape} 
-                        p1={p1} 
-                        p2={p2} 
-                        strokeWidth={strokeWidth} 
+                    <ShapeRenderer
+                        key={shape.id}
+                        shape={shape}
+                        p1={p1}
+                        p2={p2}
+                        strokeWidth={strokeWidth}
                         isSelected={selectedIds.includes(shape.id)}
+                        viewportBounds={viewportBounds}
                     />
                 );
             })}
@@ -153,12 +173,13 @@ const Canvas: React.FC<CanvasProps> = ({
 
             {/* Render Ghost Shape */}
             {draftStartId && points[draftStartId] && (
-                <GhostShapeRenderer 
+                <GhostShapeRenderer
                     type={tool.toLowerCase() as any}
                     p1={points[draftStartId]}
                     cursor={cursor}
                     strokeWidth={strokeWidth}
                     visualScale={visualScale}
+                    viewportBounds={viewportBounds}
                 />
             )}
 
