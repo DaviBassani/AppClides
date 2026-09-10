@@ -27,6 +27,8 @@ const ShareBar: React.FC<ShareBarProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const isOnline = isSharing && status === 'online';
+
   return (
     <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2">
       {/* Peer avatars */}
@@ -47,41 +49,51 @@ const ShareBar: React.FC<ShareBarProps> = ({
         </div>
       )}
 
+      {/* Pill — matches toolbar style */}
       <div
         className={clsx(
-          "flex items-center gap-1.5 rounded-full shadow-lg border backdrop-blur-md pl-3 pr-1.5 py-1.5 transition-all",
-          isSharing
+          "flex items-center gap-1 rounded-xl shadow-lg border backdrop-blur-md pl-2.5 pr-1 py-1 transition-all",
+          isOnline
             ? "bg-emerald-50/95 border-emerald-200"
             : "bg-white/95 border-slate-200"
         )}
       >
         {isSharing ? (
           <>
-            {status === 'online' && <Wifi size={14} className="text-emerald-600" />}
-            {status === 'connecting' && <Loader2 size={14} className="text-amber-500 animate-spin" />}
-            {status === 'offline' && <WifiOff size={14} className="text-slate-400" />}
+            {/* Status icon */}
+            <div className="p-1.5">
+              {status === 'online' && <Wifi size={14} className="text-emerald-600" />}
+              {status === 'connecting' && <Loader2 size={14} className="text-slate-400 animate-spin" />}
+              {status === 'offline' && <WifiOff size={14} className="text-slate-400" />}
+            </div>
 
+            {/* Status text */}
             <span className={clsx(
-              "text-xs font-medium",
-              status === 'online' ? "text-emerald-700" : status === 'connecting' ? "text-amber-600" : "text-slate-500"
+              "text-xs font-medium select-none",
+              status === 'online' ? "text-emerald-700" : "text-slate-500"
             )}>
               {status === 'online'
-                ? `${t[lang].share.online}${peers.length > 0 ? ` · ${peers.length + 1}` : ''}`
-                : status === 'connecting' ? t[lang].share.connecting : t[lang].share.offline}
+                ? `${s.online}${peers.length > 0 ? ` · ${peers.length + 1}` : ''}`
+                : status === 'connecting' ? s.connecting : s.offline}
             </span>
 
+            {/* Copy link */}
             <button
               onClick={handleCopy}
-              className="p-1.5 rounded-full text-slate-500 hover:bg-slate-100 transition-colors active:scale-95"
-              title={copied ? t[lang].share.copied : t[lang].share.button}
+              className={clsx(
+                "p-1.5 rounded-lg transition-colors active:scale-95",
+                copied ? "text-emerald-600" : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              )}
+              title={copied ? s.copied : s.button}
             >
-              {copied ? <Users size={14} className="text-emerald-600" /> : <Copy size={14} />}
+              {copied ? <Users size={14} /> : <Copy size={14} />}
             </button>
 
+            {/* Stop sharing */}
             <button
               onClick={onStop}
-              className="p-1.5 rounded-full text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors active:scale-95"
-              title={t[lang].share.stop}
+              className="p-1.5 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors active:scale-95"
+              title={s.stop}
             >
               <X size={14} />
             </button>
@@ -89,11 +101,11 @@ const ShareBar: React.FC<ShareBarProps> = ({
         ) : (
           <button
             onClick={onStart}
-            className="flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-blue-600 transition-colors active:scale-95"
-            title={t[lang].share.button}
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors active:scale-95"
+            title={s.button}
           >
             <Share2 size={14} />
-            {t[lang].share.button}
+            {s.button}
           </button>
         )}
       </div>
