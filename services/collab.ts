@@ -86,7 +86,7 @@ export class CollabSession {
   }
 
   async connect() {
-    if (!this.client || !this.channel) return;
+    if (!this.client) return;
     this.channel = this.client.channel(`room:${this.roomId}`, {
       config: { broadcast: { self: false }, presence: { key: this.peerId } }
     });
