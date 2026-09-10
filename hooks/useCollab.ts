@@ -38,7 +38,15 @@ export const useCollab = ({
   useEffect(() => { activeWorkspaceRef.current = activeWorkspace; }, [activeWorkspace]);
   useEffect(() => { langRef.current = lang; }, [lang]);
 
-  // Connect/Disconnect when sharing state changes
+  // Keep latest mutators in refs so the connection effect stays stable
+  // (updatePoints/updateShapes/updateTexts change identity on every workspace
+  // edit — including remote ops — and would tear down the session each time)
+  const mutatorsRef = useRef({ updatePoints, updateShapes, updateTexts, applyRemoteOps });
+  useEffect(() => {
+    mutatorsRef.current = { updatePoints, updateShapes, updateTexts, applyRemoteOps };
+  });
+
+  // Connect/Disconnect when sharing state changes ONLY
   useEffect(() => {
     if (!isSharing || !roomId) {
       sessionRef.current?.disconnect();
@@ -53,6 +61,7 @@ export const useCollab = ({
     const session = new CollabSession(roomId, {
       onRemoteOps: (ops) => {
         if (disposed) return;
+        const { applyRemoteOps, updatePoints, updateShapes, updateTexts } = mutatorsRef.current;
         applyRemoteOps(() => {
           if (ops.pointsUpsert) updatePoints(prev => ({ ...prev, ...ops.pointsUpsert }));
           if (ops.pointsDelete) updatePoints(prev => {
@@ -80,6 +89,7 @@ export const useCollab = ({
 
       onRemoteFullState: (state) => {
         if (disposed) return;
+        const { applyRemoteOps, updatePoints, updateShapes, updateTexts } = mutatorsRef.current;
         applyRemoteOps(() => {
           updatePoints(state.points || {});
           updateShapes(state.shapes || []);
@@ -115,7 +125,7 @@ export const useCollab = ({
       session.disconnect();
       sessionRef.current = null;
     };
-  }, [isSharing, roomId, applyRemoteOps, updatePoints, updateShapes, updateTexts]);
+  }, [isSharing, roomId]);
 
   // Broadcast local mutations: diff current workspace against last-synced snapshot
   const lastSyncedRef = useRef<{ points: Record<string, Point>; shapes: GeometricShape[]; texts: Record<string, TextLabel> }>({ points: {}, shapes: [], texts: {} });
