@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { ToolType, Point, GeometricShape, TextLabel } from '../types';
 import clsx from 'clsx';
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction';
@@ -6,10 +6,12 @@ import Grid from './canvas/Grid';
 import { ShapeRenderer, GhostShapeRenderer } from './canvas/ShapeRenderer';
 import PointRenderer from './canvas/PointRenderer';
 import TextRenderer from './canvas/TextRenderer';
+import LiveCursors from './canvas/LiveCursors';
 import StyleMenu from './StyleMenu';
 import Loupe from './canvas/Loupe';
 import { Language, t } from '../utils/i18n';
 import { getViewportBounds, ViewportBounds } from '../utils/geometry';
+import { PeerPresence } from '../services/collab';
 
 interface CanvasProps {
   tool: ToolType;
@@ -26,23 +28,29 @@ interface CanvasProps {
   lang: Language;
   selectedIds: string[];
   setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
+  peers?: PeerPresence[];
+  onCursorMove?: (cursor: { x: number; y: number } | null) => void;
+  workspaceId: string;
 }
 
-const Canvas: React.FC<CanvasProps> = ({ 
-  tool, 
-  points, 
+const Canvas: React.FC<CanvasProps> = ({
+  tool,
+  points,
   shapes,
-  texts, 
-  setPoints, 
+  texts,
+  setPoints,
   setShapes,
   setTexts,
   view,
   setView,
-  showGrid, 
+  showGrid,
   snapToGrid,
   lang,
   selectedIds,
-  setSelectedIds
+  setSelectedIds,
+  peers = [],
+  onCursorMove,
+  workspaceId
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -123,6 +131,25 @@ const Canvas: React.FC<CanvasProps> = ({
 
   const instructions = t[lang].canvas.instructions;
 
+  // Broadcast cursor world position to peers (throttled to ~30fps here; presence throttles again)
+  const lastCursorBroadcast = useRef(0);
+  const handleCursorBroadcast = useCallback((e: React.MouseEvent) => {
+    if (!onCursorMove) return;
+    const now = Date.now();
+    if (now - lastCursorBroadcast.current < 33) return;
+    lastCursorBroadcast.current = now;
+    const rect = e.currentTarget.getBoundingClientRect();
+    onCursorMove({
+      x: (e.clientX - rect.left - view.x) / view.k,
+      y: (e.clientY - rect.top - view.y) / view.k
+    });
+  }, [onCursorMove, view.x, view.y, view.k]);
+
+  const handleMouseLeaveWithCursor = useCallback((e: React.MouseEvent) => {
+    onCursorMove?.(null);
+    handleMouseUp(e);
+  }, [onCursorMove, handleMouseUp]);
+
   return (
     <div 
       ref={containerRef}
@@ -131,9 +158,9 @@ const Canvas: React.FC<CanvasProps> = ({
         cursorClass
       )}
       onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
+      onMouseMove={(e) => { handleMouseMove(e); handleCursorBroadcast(e); }}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseLeave={handleMouseLeaveWithCursor}
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -193,15 +220,18 @@ const Canvas: React.FC<CanvasProps> = ({
 
             {/* Render Snap Intersection Marker */}
             {hoveredIntersection && (
-               <circle 
-                  cx={hoveredIntersection.x} 
-                  cy={hoveredIntersection.y} 
-                  r={intersectionRadius} 
+               <circle
+                  cx={hoveredIntersection.x}
+                  cy={hoveredIntersection.y}
+                  r={intersectionRadius}
                   fill="#64748b"
                   opacity={0.7}
                   className="pointer-events-none"
                />
             )}
+
+            {/* Remote peers' live cursors */}
+            <LiveCursors peers={peers} view={view} activeWorkspaceId={workspaceId} />
 
             {/* Render Points */}
             {Object.values(points).map((p: Point) => (

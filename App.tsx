@@ -4,9 +4,11 @@ import Canvas from './components/Canvas';
 import Chat from './components/Chat';
 import TabsBar from './components/TabsBar';
 import ViewControls from './components/ViewControls';
+import ShareBar from './components/ShareBar';
 import { ToolType } from './types';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { useCollab } from './hooks/useCollab';
 import { EllipsisVertical, X } from 'lucide-react';
 import clsx from 'clsx';
 import { getBrowserLanguage, Language, t } from './utils/i18n';
@@ -28,9 +30,26 @@ const App: React.FC = () => {
   const {
     workspaces, activeWorkspaceId, activeWorkspace, setActiveWorkspaceId,
     addWorkspace, removeWorkspace, renameWorkspace,
-    updatePoints, updateShapes, updateTexts, clearActiveWorkspace, deleteSelection,
+    updatePoints, updateShapes, updateTexts, applyRemoteOps, clearActiveWorkspace, deleteSelection,
     undo, redo, canUndo, canRedo
   } = useWorkspaces();
+
+  // Cursor world position from Canvas (shared to peers via presence)
+  const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null);
+
+  // Realtime collaboration session
+  const {
+    peers, status, isSharing, shareLink,
+    startSharing, stopSharing, copyShareLink
+  } = useCollab({
+    activeWorkspace,
+    updatePoints,
+    updateShapes,
+    updateTexts,
+    applyRemoteOps,
+    cursorWorld,
+    lang
+  });
 
   // Initialize view
   useEffect(() => {
@@ -91,8 +110,8 @@ const App: React.FC = () => {
       />
 
       <div className="flex-1 relative w-full h-full">
-        <Toolbar 
-          selectedTool={selectedTool} 
+        <Toolbar
+          selectedTool={selectedTool}
           onSelectTool={setSelectedTool}
           onClear={handleClear}
           onUndo={undo}
@@ -101,7 +120,18 @@ const App: React.FC = () => {
           canRedo={canRedo}
           lang={lang}
         />
-        
+
+        {/* Share / presence bar */}
+        <ShareBar
+          isSharing={isSharing}
+          status={status}
+          peers={peers}
+          shareLink={shareLink}
+          onStart={startSharing}
+          onStop={stopSharing}
+          onCopy={copyShareLink}
+          lang={lang}
+        />
         {/* DESKTOP Right Toolbar: Static Column */}
         <div className="hidden md:flex absolute bottom-6 right-6 flex-col items-center gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10">
            <ViewControls {...viewControlsProps} layout="col" />
@@ -137,8 +167,8 @@ const App: React.FC = () => {
         </div>
 
         <main className="absolute inset-0 z-0">
-          <Canvas 
-            key={activeWorkspace.id} 
+          <Canvas
+            key={activeWorkspace.id}
             tool={selectedTool}
             points={activeWorkspace.points}
             shapes={activeWorkspace.shapes}
@@ -154,6 +184,10 @@ const App: React.FC = () => {
             // Pass selection state down
             selectedIds={selectedIds}
             setSelectedIds={setSelectedIds}
+            // Collaboration
+            peers={peers}
+            onCursorMove={setCursorWorld}
+            workspaceId={activeWorkspace.id}
           />
         </main>
       </div>

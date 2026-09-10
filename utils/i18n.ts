@@ -58,6 +58,14 @@ export const t = {
     tabs: {
       new: 'Nova Demonstração',
       untitled: 'Sem Título'
+    },
+    share: {
+      button: 'Compartilhar',
+      stop: 'Encerrar compartilhamento',
+      copied: 'Link copiado!',
+      online: 'Ao vivo',
+      offline: 'Somente você',
+      connecting: 'Conectando...'
     }
   },
   en: {
@@ -111,6 +119,14 @@ export const t = {
     tabs: {
       new: 'New Demonstration',
       untitled: 'Untitled'
+    },
+    share: {
+      button: 'Share',
+      stop: 'Stop sharing',
+      copied: 'Link copied!',
+      online: 'Live',
+      offline: 'Just you',
+      connecting: 'Connecting...'
     }
   }
 };

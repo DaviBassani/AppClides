@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Workspace, Point, GeometricShape, TextLabel } from '../types';
 import { generateId } from '../utils/geometry';
 import { storage } from '../utils/storage';
@@ -25,6 +25,8 @@ interface WorkspaceHistory {
 }
 
 export const useWorkspaces = () => {
+  // When true, mutations come from remote peers and must NOT enter local undo history
+  const remoteApplyRef = useRef(false);
   // --- State ---
 
   // Initialize state from storage or defaults
@@ -155,7 +157,7 @@ export const useWorkspaces = () => {
 
   const updatePoints = useCallback((action: React.SetStateAction<Record<string, Point>>) => {
     const targetId = activeWorkspace.id;
-    
+
     // 1. Calculate new state
     const currentPoints = activeWorkspace.points;
     const newPoints = typeof action === 'function' ? (action as Function)(currentPoints) : action;
@@ -163,8 +165,10 @@ export const useWorkspaces = () => {
     // If no change, do nothing
     if (currentPoints === newPoints) return;
 
-    // 2. Save snapshot of OLD state
-    saveSnapshot(targetId, currentPoints, activeWorkspace.shapes, activeWorkspace.texts);
+    // 2. Save snapshot of OLD state (only for local edits)
+    if (!remoteApplyRef.current) {
+      saveSnapshot(targetId, currentPoints, activeWorkspace.shapes, activeWorkspace.texts);
+    }
 
     // 3. Update state
     setWorkspaces(prev => prev.map(ws => {
@@ -182,8 +186,10 @@ export const useWorkspaces = () => {
 
     if (currentShapes === newShapes) return;
 
-    // 2. Save snapshot of OLD state
-    saveSnapshot(targetId, activeWorkspace.points, currentShapes, activeWorkspace.texts);
+    // 2. Save snapshot of OLD state (only for local edits)
+    if (!remoteApplyRef.current) {
+      saveSnapshot(targetId, activeWorkspace.points, currentShapes, activeWorkspace.texts);
+    }
 
     // 3. Update state
     setWorkspaces(prev => prev.map(ws => {
@@ -194,19 +200,31 @@ export const useWorkspaces = () => {
 
   const updateTexts = useCallback((action: React.SetStateAction<Record<string, TextLabel>>) => {
     const targetId = activeWorkspace.id;
-    
+
     const currentTexts = activeWorkspace.texts || {};
     const newTexts = typeof action === 'function' ? (action as Function)(currentTexts) : action;
 
     if (currentTexts === newTexts) return;
 
-    saveSnapshot(targetId, activeWorkspace.points, activeWorkspace.shapes, currentTexts);
+    if (!remoteApplyRef.current) {
+      saveSnapshot(targetId, activeWorkspace.points, activeWorkspace.shapes, currentTexts);
+    }
 
     setWorkspaces(prev => prev.map(ws => {
       if (ws.id !== targetId) return ws;
       return { ...ws, texts: newTexts };
     }));
   }, [activeWorkspace, saveSnapshot]);
+
+  // Apply remote ops without touching local undo history
+  const applyRemoteOps = useCallback((apply: (remoteApplyRef: React.MutableRefObject<boolean>) => void) => {
+    remoteApplyRef.current = true;
+    try {
+      apply(remoteApplyRef);
+    } finally {
+      remoteApplyRef.current = false;
+    }
+  }, []);
 
 
   const clearActiveWorkspace = useCallback(() => {
@@ -310,6 +328,7 @@ export const useWorkspaces = () => {
     updatePoints,
     updateShapes,
     updateTexts,
+    applyRemoteOps,
     clearActiveWorkspace,
     deleteSelection,
     undo,
