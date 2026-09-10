@@ -41,7 +41,9 @@ export const useGlobalShortcuts = ({ onUndo, onRedo, onSelectTool, onDelete }: U
             case 'p': onSelectTool(ToolType.POINT); break;
             case 's': onSelectTool(ToolType.SEGMENT); break;
             case 'r': onSelectTool(ToolType.LINE); break;
+            case 'y': onSelectTool(ToolType.RAY); break;
             case 'c': onSelectTool(ToolType.CIRCLE); break;
+            case 't': onSelectTool(ToolType.TEXT); break;
             case 'escape': onSelectTool(ToolType.SELECT); break;
             case 'e': onSelectTool(ToolType.ERASER); break;
           }

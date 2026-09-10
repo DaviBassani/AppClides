@@ -13,6 +13,7 @@ export const t = {
       POINT: 'Ponto',
       SEGMENT: 'Segmento',
       LINE: 'Reta',
+      RAY: 'Semi-reta',
       CIRCLE: 'Círculo',
       TEXT: 'Texto',
       ERASER: 'Apagar'
@@ -29,6 +30,7 @@ export const t = {
         SELECT: 'Arraste objetos para mover, ou o fundo para navegar',
         SEGMENT: 'Selecione dois pontos',
         LINE: 'Selecione dois pontos',
+        RAY: 'Selecione origem e direção',
         CIRCLE: 'Selecione centro e raio',
         TEXT: 'Clique para adicionar texto',
         ERASER: 'Clique em objetos para apagar'
@@ -64,6 +66,7 @@ export const t = {
       POINT: 'Point',
       SEGMENT: 'Segment',
       LINE: 'Line',
+      RAY: 'Ray',
       CIRCLE: 'Circle',
       TEXT: 'Text',
       ERASER: 'Erase'
@@ -80,6 +83,7 @@ export const t = {
         SELECT: 'Drag objects to move, or background to pan',
         SEGMENT: 'Select two points',
         LINE: 'Select two points',
+        RAY: 'Select origin and direction',
         CIRCLE: 'Select center and radius',
         TEXT: 'Click to add text',
         ERASER: 'Click objects to delete'

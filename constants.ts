@@ -1,5 +1,5 @@
 import { ToolType } from './types';
-import { MousePointer2, Circle, Minus, Activity, MoveRight, XCircle, Dot, Undo2, Redo2, Type } from 'lucide-react';
+import { MousePointer2, Circle, Minus, MoveHorizontal, ArrowRightFromLine, Eraser, Dot, Undo2, Redo2, Type } from 'lucide-react';
 
 export const SNAP_DISTANCE = 15;
 
@@ -7,11 +7,11 @@ export const TOOLS = [
   { id: ToolType.SELECT, icon: MousePointer2, shortcut: 'Esc' },
   { id: ToolType.POINT, icon: Dot, shortcut: 'P' },
   { id: ToolType.SEGMENT, icon: Minus, shortcut: 'S' },
-  { id: ToolType.LINE, icon: Activity, shortcut: 'R' }, // Using Activity as a proxy for infinite line visual
-  { id: ToolType.RAY, icon: MoveRight, shortcut: 'Y' }, // Semi-infinite ray (arrow right)
+  { id: ToolType.LINE, icon: MoveHorizontal, shortcut: 'R' }, // Line with arrows on both ends (infinite both directions)
+  { id: ToolType.RAY, icon: ArrowRightFromLine, shortcut: 'Y' }, // Arrow leaving a point (semi-infinite)
   { id: ToolType.CIRCLE, icon: Circle, shortcut: 'C' },
   { id: ToolType.TEXT, icon: Type, shortcut: 'T' },
-  { id: ToolType.ERASER, icon: XCircle, shortcut: 'E' },
+  { id: ToolType.ERASER, icon: Eraser, shortcut: 'E' },
 ];
 
 export const ICONS = {

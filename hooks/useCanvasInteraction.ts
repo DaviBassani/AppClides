@@ -51,6 +51,7 @@ export const useCanvasInteraction = ({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hoveredIntersection, setHoveredIntersection] = useState<{x: number, y: number} | null>(null);
+  const [isEraseHover, setIsEraseHover] = useState(false);
   
   // Selection State: Use external if available, otherwise internal (fallback)
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
@@ -275,11 +276,12 @@ export const useCanvasInteraction = ({
   };
 
   const handleMoveAction = (clientX: number, clientY: number) => {
-    const { x, y, snappedId, isIntersection, textId } = getEffectiveCoordinates(clientX, clientY, draggingId);
-    
+    const { x, y, snappedId, shapeId, isIntersection, textId } = getEffectiveCoordinates(clientX, clientY, draggingId);
+
     setCursor({ x, y });
     setHoveredId(snappedId || textId);
     setHoveredIntersection(isIntersection ? {x, y} : null);
+    setIsEraseHover(tool === ToolType.ERASER && !!(snappedId || shapeId || textId));
 
     if (draggingId && tool === ToolType.SELECT) {
       if (points[draggingId]) {
@@ -498,11 +500,12 @@ export const useCanvasInteraction = ({
     handleWheel,
     // State exposed for rendering
     cursor,
-    touchPos, 
+    touchPos,
     draftStartId,
     draggingId,
     hoveredId,
     hoveredIntersection,
+    isEraseHover,
     isPanning,
     selectedIds,
     setSelectedIds

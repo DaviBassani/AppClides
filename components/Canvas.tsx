@@ -52,12 +52,20 @@ const Canvas: React.FC<CanvasProps> = ({
     handleMouseDown, handleMouseMove, handleMouseUp,
     handleTouchStart, handleTouchMove, handleTouchEnd,
     handleWheel,
-    cursor, draftStartId, draggingId, hoveredId, hoveredIntersection, isPanning,
-    touchPos, 
+    cursor, draftStartId, draggingId, hoveredId, hoveredIntersection, isPanning, isEraseHover,
+    touchPos,
   } = useCanvasInteraction({
     tool, points, shapes, texts, setPoints, setShapes, setTexts, view, setView, snapToGrid, containerRef,
     externalSelection: { selectedIds, setSelectedIds, editingTextId, setEditingTextId }
   });
+
+  const cursorClass = isPanning
+    ? "cursor-grabbing"
+    : tool === ToolType.SELECT
+      ? "cursor-default"
+      : tool === ToolType.ERASER
+        ? (isEraseHover ? "cursor-pointer" : "cursor-crosshair")
+        : "cursor-crosshair";
 
   const handleUpdateColor = (color: string) => {
       setPoints(prev => {
@@ -120,7 +128,7 @@ const Canvas: React.FC<CanvasProps> = ({
       ref={containerRef}
       className={clsx(
         "relative w-full h-full overflow-hidden touch-none select-none",
-        isPanning ? "cursor-grabbing" : (tool === ToolType.SELECT ? "cursor-default" : "cursor-crosshair")
+        cursorClass
       )}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -277,6 +285,7 @@ const Canvas: React.FC<CanvasProps> = ({
          {tool === ToolType.SELECT && instructions.SELECT}
          {tool === ToolType.SEGMENT && instructions.SEGMENT}
          {tool === ToolType.LINE && instructions.LINE}
+         {tool === ToolType.RAY && instructions.RAY}
          {tool === ToolType.CIRCLE && instructions.CIRCLE}
          {tool === ToolType.TEXT && instructions.TEXT}
          
