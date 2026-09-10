@@ -1,6 +1,10 @@
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { Workspace, Point, GeometricShape, TextLabel } from '../types';
 
+// Injected by Vite define (import.meta.env is compile-time safe, no runtime polyfill needed)
+const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = (import.meta as any).env.VITE_SUPABASE_ANON_KEY as string;
+
 export interface PeerPresence {
   id: string;
   name: string;
@@ -71,12 +75,10 @@ export class CollabSession {
     this.peerName = randomPeerName();
     this.peerColor = PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)];
 
-    const url = process.env.SUPABASE_URL;
-    const anonKey = process.env.SUPABASE_ANON_KEY;
-    if (!url || !anonKey) {
-      throw new Error('SUPABASE_URL or SUPABASE_ANON_KEY is missing');
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      throw new Error('SUPABASE_URL or SUPABASE_ANON_KEY is missing (import.meta.env.VITE_SUPABASE_*)');
     }
-    this.client = createClient(url, anonKey, {
+    this.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       realtime: { params: { eventsPerSecond: 30 } }
     });
   }
