@@ -131,13 +131,9 @@ const Canvas: React.FC<CanvasProps> = ({
 
   const instructions = t[lang].canvas.instructions;
 
-  // Broadcast cursor world position to peers (throttled to ~30fps here; presence throttles again)
-  const lastCursorBroadcast = useRef(0);
+  // Broadcast cursor world position to peers (presence throttles further inside CollabSession)
   const handleCursorBroadcast = useCallback((e: React.MouseEvent) => {
     if (!onCursorMove) return;
-    const now = Date.now();
-    if (now - lastCursorBroadcast.current < 33) return;
-    lastCursorBroadcast.current = now;
     const rect = e.currentTarget.getBoundingClientRect();
     onCursorMove({
       x: (e.clientX - rect.left - view.x) / view.k,

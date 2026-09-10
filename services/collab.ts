@@ -67,6 +67,11 @@ export class CollabSession {
   private cursorThrottle: number | null = null;
   private pendingCursor: { x: number; y: number } | null = null;
   private status: 'connecting' | 'online' | 'offline' = 'connecting';
+  private reconnectAttempts = 0;
+  private reconnectTimer: number | null = null;
+  private lastTrackTime = 0;
+  // Supabase free tier: max 5 presence updates per second per client
+  private static readonly PRESENCE_THROTTLE_MS = 250;
 
   constructor(roomId: string, events: CollabEvents) {
     this.roomId = roomId;
@@ -114,6 +119,7 @@ export class CollabSession {
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           this.status = 'online';
+          this.reconnectAttempts = 0;
           this.events.onStatusChanged(this.status);
           await this.channel?.track({
             id: this.peerId,
@@ -127,11 +133,25 @@ export class CollabSession {
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           this.status = 'offline';
           this.events.onStatusChanged(this.status);
+          this.scheduleReconnect();
         } else if (status === 'CLOSED') {
           this.status = 'offline';
           this.events.onStatusChanged(this.status);
+          this.scheduleReconnect();
         }
       });
+  }
+
+  private scheduleReconnect() {
+    if (this.reconnectTimer !== null) return;
+    const delay = Math.min(2000 * Math.pow(2, this.reconnectAttempts), 30000);
+    this.reconnectAttempts++;
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      // Re-create channel (old one was closed by server)
+      this.channel = null;
+      this.connect();
+    }, delay);
   }
 
   // --- Outgoing ops (local edits) ---
@@ -148,26 +168,34 @@ export class CollabSession {
     this.channel?.track({ id: this.peerId, name: this.peerName, color: this.peerColor, cursor: null, activeWorkspaceId: workspaceId });
   }
 
-  // --- Cursor presence (throttled to ~30fps) ---
+  // --- Cursor presence (throttled to stay under Supabase's 5/sec presence limit) ---
 
   private lastWorkspaceId: string | null = null;
 
   updateCursor(cursor: { x: number; y: number } | null) {
     this.pendingCursor = cursor;
     if (this.cursorThrottle !== null) return;
+    const now = Date.now();
+    const elapsed = now - this.lastTrackTime;
+    const wait = Math.max(0, CollabSession.PRESENCE_THROTTLE_MS - elapsed);
     this.cursorThrottle = window.setTimeout(() => {
       this.cursorThrottle = null;
+      this.lastTrackTime = Date.now();
       if (this.pendingCursor) {
         this.channel?.track({ id: this.peerId, name: this.peerName, color: this.peerColor, cursor: this.pendingCursor, activeWorkspaceId: this.lastWorkspaceId });
       }
       this.pendingCursor = null;
-    }, 33);
+    }, wait);
   }
 
   disconnect() {
     if (this.cursorThrottle !== null) {
       window.clearTimeout(this.cursorThrottle);
       this.cursorThrottle = null;
+    }
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
     this.channel?.unsubscribe();
     this.channel = null;
