@@ -143,7 +143,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
                   <Icon size={24} strokeWidth={isSelected ? 2.5 : 2} />
                   <span
                     className={clsx(
-                      "absolute top-1 right-1.5 text-[9px] font-semibold leading-none hidden md:block",
+                      "absolute top-1.5 right-2 text-[9px] font-semibold leading-none hidden md:block",
                       isSelected ? "text-blue-200" : "text-slate-300 group-hover:text-slate-400"
                     )}
                   >
