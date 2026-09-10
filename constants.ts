@@ -4,14 +4,14 @@ import { MousePointer2, Circle, Minus, MoveHorizontal, ArrowRightFromLine, Erase
 export const SNAP_DISTANCE = 15;
 
 export const TOOLS = [
-  { id: ToolType.SELECT, icon: MousePointer2, shortcut: 'Esc' },
-  { id: ToolType.POINT, icon: Dot, shortcut: 'P' },
-  { id: ToolType.SEGMENT, icon: Minus, shortcut: 'S' },
-  { id: ToolType.LINE, icon: MoveHorizontal, shortcut: 'R' }, // Line with arrows on both ends (infinite both directions)
-  { id: ToolType.RAY, icon: ArrowRightFromLine, shortcut: 'Y' }, // Arrow leaving a point (semi-infinite)
-  { id: ToolType.CIRCLE, icon: Circle, shortcut: 'C' },
-  { id: ToolType.TEXT, icon: Type, shortcut: 'T' },
-  { id: ToolType.ERASER, icon: Eraser, shortcut: 'E' },
+  { id: ToolType.SELECT, icon: MousePointer2, shortcut: '1' },
+  { id: ToolType.POINT, icon: Dot, shortcut: '2' },
+  { id: ToolType.SEGMENT, icon: Minus, shortcut: '3' },
+  { id: ToolType.LINE, icon: MoveHorizontal, shortcut: '4' }, // Line with arrows on both ends (infinite both directions)
+  { id: ToolType.RAY, icon: ArrowRightFromLine, shortcut: '5' }, // Arrow leaving a point (semi-infinite)
+  { id: ToolType.CIRCLE, icon: Circle, shortcut: '6' },
+  { id: ToolType.TEXT, icon: Type, shortcut: '7' },
+  { id: ToolType.ERASER, icon: Eraser, shortcut: '8' },
 ];
 
 export const ICONS = {
