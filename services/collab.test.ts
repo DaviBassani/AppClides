@@ -68,7 +68,7 @@ const events = (): CollabEvents => ({
   onRemoteOps: vi.fn(),
   onRemoteFullState: vi.fn(),
   onRequestFullState: vi.fn(),
-  onRemoteCursor: vi.fn(),
+  onRemotePeer: vi.fn(),
   onPeersChanged: vi.fn(),
   onStatusChanged: vi.fn()
 });
@@ -149,6 +149,23 @@ describe('CollabSession traffic budget', () => {
 
     expect(client.channelInstance.untrackCalls).toBe(0);
     expect(client.removeCalls).toBe(1);
+  });
+
+  it('updates a display name with one explicit Presence call', async () => {
+    const client = new FakeClient();
+    const session = new CollabSession('room', events(), client as any);
+    session.connect();
+    client.channelInstance.emitStatus('SUBSCRIBED');
+    await vi.runAllTicks();
+
+    const originalName = session.info.name;
+    const requestedName = originalName === 'Davi' ? 'Davi 2' : 'Davi';
+    await session.updateName(`  ${requestedName}  `);
+    await session.updateName(requestedName);
+
+    expect(session.info.name).toBe(requestedName);
+    expect(client.channelInstance.trackCalls).toBe(2);
+    expect(client.channelInstance.sent.filter(message => message.event === 'profile')).toHaveLength(1);
   });
 
   it('rebases local edits over an incoming initial snapshot', async () => {

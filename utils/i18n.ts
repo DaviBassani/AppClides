@@ -67,7 +67,13 @@ export const t = {
       offline: 'Offline',
       connecting: 'Conectando...',
       reconnecting: 'Reconectando...',
-      collaborators: 'colaboradores'
+      collaborators: 'colaboradores',
+      beta: 'Beta',
+      editName: 'Editar seu nome',
+      yourName: 'Seu nome na sala',
+      namePlaceholder: 'Como quer aparecer?',
+      profileHint: 'Este nome aparece para todos nesta colaboração.',
+      saveName: 'Salvar nome'
     }
   },
   en: {
@@ -130,7 +136,13 @@ export const t = {
       offline: 'Offline',
       connecting: 'Connecting...',
       reconnecting: 'Reconnecting...',
-      collaborators: 'collaborators'
+      collaborators: 'collaborators',
+      beta: 'Beta',
+      editName: 'Edit your name',
+      yourName: 'Your name in this room',
+      namePlaceholder: 'How should you appear?',
+      profileHint: 'This name is visible to everyone in this collaboration.',
+      saveName: 'Save name'
     }
   }
 };

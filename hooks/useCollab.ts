@@ -35,6 +35,7 @@ export const useCollab = ({
 }: UseCollabProps) => {
   const [pendingInitialRoom, setPendingInitialRoom] = useState<string | null>(() => getRoomFromUrl());
   const [peers, setPeers] = useState<PeerPresence[]>([]);
+  const [localPeer, setLocalPeer] = useState<PeerPresence | null>(null);
   const [status, setStatus] = useState<CollabStatus>('offline');
   const sessionRef = useRef<CollabSession | null>(null);
   const newRoomsRef = useRef(new Set<string>());
@@ -106,7 +107,7 @@ export const useCollab = ({
           texts: workspace.texts || {}
         }, requestId);
       },
-      onRemoteCursor: remotePeer => {
+      onRemotePeer: remotePeer => {
         if (disposed) return;
         setPeers(current => {
           const existing = current.some(peer => peer.id === remotePeer.id);
@@ -128,6 +129,7 @@ export const useCollab = ({
     }, undefined, { requestInitialState: !isNewRoom });
 
     sessionRef.current = session;
+    setLocalPeer(session.info);
     setStatus('connecting');
     // Deferring one tick prevents React StrictMode's probe mount from joining
     // and immediately leaving a paid Realtime channel in development.
@@ -170,17 +172,26 @@ export const useCollab = ({
     void navigator.clipboard.writeText(url);
   }, [roomId]);
 
-  const localPeerId = sessionRef.current?.info.peerId;
+  const renamePeer = useCallback(async (name: string) => {
+    const session = sessionRef.current;
+    if (!session) return;
+    const profile = await session.updateName(name);
+    setLocalPeer(profile);
+  }, []);
+
+  const localPeerId = sessionRef.current?.info.id;
   const remotePeers = peers.filter(peer => peer.id !== localPeerId);
 
   return {
     peers: remotePeers,
     status,
     isSharing: !!roomId,
+    localPeer,
     roomId,
     shareLink: roomId ? `${window.location.origin}${window.location.pathname}?room=${roomId}` : null,
     startSharing,
     stopSharing,
-    copyShareLink
+    copyShareLink,
+    renamePeer
   };
 };

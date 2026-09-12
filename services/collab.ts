@@ -17,7 +17,7 @@ export interface CollabEvents {
   onRemoteOps: (ops: CollabOps) => void;
   onRemoteFullState: (state: BoardState) => void;
   onRequestFullState: (requestId: string) => void;
-  onRemoteCursor: (peer: PeerPresence) => void;
+  onRemotePeer: (peer: PeerPresence) => void;
   onPeersChanged: (peers: PeerPresence[]) => void;
   onStatusChanged: (status: CollabStatus) => void;
 }
@@ -38,27 +38,48 @@ const PEER_COLORS = [
 ];
 
 const PEER_NAMES = ['Euclid', 'Pythagoras', 'Archimedes', 'Thales', 'Hypatia', 'Ptolemy', 'Aristotle', 'Plato'];
-const IDENTITY_KEY = 'euclides_collab_identity_v1';
+const LEGACY_IDENTITY_KEY = 'euclides_collab_identity_v1';
+const PEER_ID_KEY = 'euclides_collab_peer_id_v1';
+const PROFILE_KEY = 'euclides_collab_profile_v1';
 
 const getPeerIdentity = () => {
+  let legacy: { id?: string; name?: string; color?: string } | null = null;
   try {
-    const stored = sessionStorage.getItem(IDENTITY_KEY);
-    if (stored) return JSON.parse(stored) as { id: string; name: string; color: string };
+    const stored = sessionStorage.getItem(LEGACY_IDENTITY_KEY);
+    if (stored) legacy = JSON.parse(stored);
   } catch {
     // sessionStorage may be unavailable in hardened browser profiles.
   }
 
-  const identity = {
-    id: crypto.randomUUID(),
-    name: PEER_NAMES[Math.floor(Math.random() * PEER_NAMES.length)],
-    color: PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)]
+  let id = legacy?.id || crypto.randomUUID();
+  try {
+    id = sessionStorage.getItem(PEER_ID_KEY) || id;
+    sessionStorage.setItem(PEER_ID_KEY, id);
+  } catch {
+    // Collaboration still works with an ephemeral ID.
+  }
+
+  let profile = {
+    name: legacy?.name || PEER_NAMES[Math.floor(Math.random() * PEER_NAMES.length)],
+    color: legacy?.color || PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)]
   };
   try {
-    sessionStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+    const stored = localStorage.getItem(PROFILE_KEY);
+    if (stored) profile = { ...profile, ...JSON.parse(stored) };
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
   } catch {
-    // Collaboration still works without persistence across reloads.
+    // Collaboration still works without profile persistence.
   }
-  return identity;
+
+  return { id, ...profile };
+};
+
+const savePeerProfile = (name: string, color: string) => {
+  try {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({ name, color }));
+  } catch {
+    // Profile remains valid for the current session.
+  }
 };
 
 let sharedClient: SupabaseClient | null = null;
@@ -123,8 +144,8 @@ export class CollabSession {
     this.requestInitialState = options.requestInitialState !== false;
   }
 
-  get info() {
-    return { peerId: this.peerId, peerName: this.peerName, peerColor: this.peerColor };
+  get info(): PeerPresence {
+    return { id: this.peerId, name: this.peerName, color: this.peerColor };
   }
 
   async connect() {
@@ -149,7 +170,12 @@ export class CollabSession {
       .on('broadcast', { event: 'cursor' }, ({ payload }) => {
         const envelope = payload as Envelope<PeerPresence>;
         if (!this.acceptEnvelope(envelope)) return;
-        this.events.onRemoteCursor(envelope.payload);
+        this.events.onRemotePeer(envelope.payload);
+      })
+      .on('broadcast', { event: 'profile' }, ({ payload }) => {
+        const envelope = payload as Envelope<PeerPresence>;
+        if (!this.acceptEnvelope(envelope)) return;
+        this.events.onRemotePeer(envelope.payload);
       })
       .on('broadcast', { event: 'request-state' }, ({ payload }) => {
         const envelope = payload as Envelope<{ requestId: string }>;
@@ -220,6 +246,19 @@ export class CollabSession {
 
   sendFullState(state: BoardState, requestId: string) {
     this.sendEnvelope('full-state', { requestId, state });
+  }
+
+  async updateName(value: string) {
+    const name = value.trim().slice(0, 32);
+    if (!name || name === this.peerName) return this.info;
+    this.peerName = name;
+    savePeerProfile(this.peerName, this.peerColor);
+
+    if (this.channel && this.status === 'online') {
+      await this.channel.track({ id: this.peerId, name: this.peerName, color: this.peerColor });
+      this.sendEnvelope('profile', { id: this.peerId, name: this.peerName, color: this.peerColor });
+    }
+    return this.info;
   }
 
   async disconnect() {

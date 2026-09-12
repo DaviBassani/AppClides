@@ -36,13 +36,13 @@ const App: React.FC = () => {
     undo, redo, canUndo, canRedo
   } = useWorkspaces();
 
-  // Cursor world position from Canvas (shared to peers via presence)
+  // Cursor world position from Canvas (shared to peers via bounded Broadcast)
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null);
 
   // Realtime collaboration session
   const {
-    peers, status, isSharing,
-    startSharing, stopSharing, copyShareLink
+    peers, status, isSharing, localPeer,
+    startSharing, stopSharing, copyShareLink, renamePeer
   } = useCollab({
     workspaces,
     activeWorkspace,
@@ -130,9 +130,11 @@ const App: React.FC = () => {
           isSharing={isSharing}
           status={status}
           peers={peers}
+          localPeer={localPeer}
           onStart={startSharing}
           onStop={stopSharing}
           onCopy={copyShareLink}
+          onRename={renamePeer}
           lang={lang}
         />
         {/* DESKTOP Right Toolbar: Static Column */}
