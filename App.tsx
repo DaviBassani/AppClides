@@ -30,7 +30,9 @@ const App: React.FC = () => {
   const {
     workspaces, activeWorkspaceId, activeWorkspace, setActiveWorkspaceId,
     addWorkspace, removeWorkspace, renameWorkspace,
-    updatePoints, updateShapes, updateTexts, applyRemoteOps, clearActiveWorkspace, deleteSelection,
+    updatePoints, updateShapes, updateTexts, clearActiveWorkspace, deleteSelection,
+    setLocalOpsHandler, setWorkspaceRoom, joinRoom,
+    applyRemoteOpsToRoom, applyRemoteStateToRoom,
     undo, redo, canUndo, canRedo
   } = useWorkspaces();
 
@@ -39,14 +41,16 @@ const App: React.FC = () => {
 
   // Realtime collaboration session
   const {
-    peers, status, isSharing, shareLink,
+    peers, status, isSharing,
     startSharing, stopSharing, copyShareLink
   } = useCollab({
+    workspaces,
     activeWorkspace,
-    updatePoints,
-    updateShapes,
-    updateTexts,
-    applyRemoteOps,
+    setLocalOpsHandler,
+    setWorkspaceRoom,
+    joinRoom,
+    applyRemoteOpsToRoom,
+    applyRemoteStateToRoom,
     cursorWorld,
     lang
   });
@@ -126,7 +130,6 @@ const App: React.FC = () => {
           isSharing={isSharing}
           status={status}
           peers={peers}
-          shareLink={shareLink}
           onStart={startSharing}
           onStop={stopSharing}
           onCopy={copyShareLink}
@@ -187,7 +190,6 @@ const App: React.FC = () => {
             // Collaboration
             peers={peers}
             onCursorMove={setCursorWorld}
-            workspaceId={activeWorkspace.id}
           />
         </main>
       </div>

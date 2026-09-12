@@ -42,6 +42,7 @@ export interface Workspace {
   shapes: GeometricShape[];
   texts: Record<string, TextLabel>;
   createdAt: number;
+  roomId?: string;
 }
 
 export interface AppState {

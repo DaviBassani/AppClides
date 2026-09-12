@@ -30,7 +30,6 @@ interface CanvasProps {
   setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
   peers?: PeerPresence[];
   onCursorMove?: (cursor: { x: number; y: number } | null) => void;
-  workspaceId: string;
 }
 
 const Canvas: React.FC<CanvasProps> = ({
@@ -49,8 +48,7 @@ const Canvas: React.FC<CanvasProps> = ({
   selectedIds,
   setSelectedIds,
   peers = [],
-  onCursorMove,
-  workspaceId
+  onCursorMove
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -226,9 +224,6 @@ const Canvas: React.FC<CanvasProps> = ({
                />
             )}
 
-            {/* Remote peers' live cursors */}
-            <LiveCursors peers={peers} view={view} activeWorkspaceId={workspaceId} />
-
             {/* Render Points */}
             {Object.values(points).map((p: Point) => (
                 <PointRenderer
@@ -245,6 +240,9 @@ const Canvas: React.FC<CanvasProps> = ({
             ))}
         </g>
       </svg>
+
+      {/* Remote peers' cursors stay a constant screen size, Excalidraw-style */}
+      <LiveCursors peers={peers} view={view} />
 
       {/* Text Editing Overlay */}
       {editingTextId && texts[editingTextId] && (

@@ -1,33 +1,35 @@
-import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
-import { Workspace, Point, GeometricShape, TextLabel } from '../types';
+import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
+import { applyBoardOps, BoardState, CollabOps, isEmptyOps, mergeOps } from './collabProtocol';
 
-// Injected by Vite define (import.meta.env is compile-time safe, no runtime polyfill needed)
 const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = (import.meta as any).env.VITE_SUPABASE_ANON_KEY as string;
+
+export type CollabStatus = 'connecting' | 'online' | 'reconnecting' | 'offline';
 
 export interface PeerPresence {
   id: string;
   name: string;
   color: string;
-  cursor: { x: number; y: number } | null;
-  activeWorkspaceId: string | null;
-}
-
-export interface CollabOps {
-  pointsUpsert?: Record<string, Point>;
-  pointsDelete?: string[];
-  shapesUpsert?: GeometricShape[];
-  shapesDelete?: string[];
-  textsUpsert?: Record<string, TextLabel>;
-  textsDelete?: string[];
+  cursor?: { x: number; y: number } | null;
 }
 
 export interface CollabEvents {
   onRemoteOps: (ops: CollabOps) => void;
-  onRemoteFullState: (state: { points: Record<string, Point>; shapes: GeometricShape[]; texts: Record<string, TextLabel> }) => void;
-  onRequestFullState: () => void;
+  onRemoteFullState: (state: BoardState) => void;
+  onRequestFullState: (requestId: string) => void;
+  onRemoteCursor: (peer: PeerPresence) => void;
   onPeersChanged: (peers: PeerPresence[]) => void;
-  onStatusChanged: (status: 'connecting' | 'online' | 'offline') => void;
+  onStatusChanged: (status: CollabStatus) => void;
+}
+
+interface Envelope<T> {
+  senderId: string;
+  messageId: string;
+  payload: T;
+}
+
+interface CollabSessionOptions {
+  requestInitialState?: boolean;
 }
 
 const PEER_COLORS = [
@@ -35,9 +37,38 @@ const PEER_COLORS = [
   '#a855f7', '#14b8a6', '#eab308', '#ec4899'
 ];
 
-const randomPeerName = () => {
-  const animals = ['Euclid', 'Pythagoras', 'Archimedes', 'Thales', 'Hypatia', 'Ptolemy', 'Aristotle', 'Plato'];
-  return animals[Math.floor(Math.random() * animals.length)];
+const PEER_NAMES = ['Euclid', 'Pythagoras', 'Archimedes', 'Thales', 'Hypatia', 'Ptolemy', 'Aristotle', 'Plato'];
+const IDENTITY_KEY = 'euclides_collab_identity_v1';
+
+const getPeerIdentity = () => {
+  try {
+    const stored = sessionStorage.getItem(IDENTITY_KEY);
+    if (stored) return JSON.parse(stored) as { id: string; name: string; color: string };
+  } catch {
+    // sessionStorage may be unavailable in hardened browser profiles.
+  }
+
+  const identity = {
+    id: crypto.randomUUID(),
+    name: PEER_NAMES[Math.floor(Math.random() * PEER_NAMES.length)],
+    color: PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)]
+  };
+  try {
+    sessionStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+  } catch {
+    // Collaboration still works without persistence across reloads.
+  }
+  return identity;
+};
+
+let sharedClient: SupabaseClient | null = null;
+
+const getClient = () => {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error('SUPABASE_URL or SUPABASE_ANON_KEY is missing (import.meta.env.VITE_SUPABASE_*)');
+  }
+  if (!sharedClient) sharedClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return sharedClient;
 };
 
 export const getRoomFromUrl = (): string | null => {
@@ -48,44 +79,48 @@ export const getRoomFromUrl = (): string | null => {
 export const setRoomInUrl = (room: string | null) => {
   if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
-  if (room) {
-    url.searchParams.set('room', room);
-  } else {
-    url.searchParams.delete('room');
-  }
+  if (room) url.searchParams.set('room', room);
+  else url.searchParams.delete('room');
   window.history.replaceState({}, '', url.toString());
 };
 
 export class CollabSession {
-  private client: SupabaseClient | null = null;
+  private static readonly CURSOR_INTERVAL_MS = 500;
+  private static readonly OPS_BATCH_MS = 100;
+  private static readonly roomCleanup = new Map<string, Promise<unknown>>();
+
+  private client: SupabaseClient;
   private channel: RealtimeChannel | null = null;
+  private status: CollabStatus = 'connecting';
+  private destroyed = false;
   private events: CollabEvents;
   private roomId: string;
   private peerId: string;
   private peerName: string;
   private peerColor: string;
-  private cursorThrottle: number | null = null;
+  private peerIds = new Set<string>();
+  private seenMessages = new Set<string>();
+  private cursorTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingCursor: { x: number; y: number } | null = null;
-  private status: 'connecting' | 'online' | 'offline' = 'connecting';
-  private reconnectAttempts = 0;
-  private reconnectTimer: number | null = null;
-  private lastTrackTime = 0;
-  // Supabase free tier: max 5 presence updates per second per client
-  private static readonly PRESENCE_THROTTLE_MS = 250;
+  private hasPendingCursor = false;
+  private lastCursorSentAt = 0;
+  private opsTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingOps: CollabOps = {};
+  private pendingStateRequestId: string | null = null;
+  private pendingSyncOps: CollabOps = {};
+  private stateRequestTimer: ReturnType<typeof setTimeout> | null = null;
+  private stateRequestAttempts = 0;
+  private requestInitialState: boolean;
 
-  constructor(roomId: string, events: CollabEvents) {
+  constructor(roomId: string, events: CollabEvents, client?: SupabaseClient, options: CollabSessionOptions = {}) {
     this.roomId = roomId;
     this.events = events;
-    this.peerId = crypto.randomUUID();
-    this.peerName = randomPeerName();
-    this.peerColor = PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)];
-
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      throw new Error('SUPABASE_URL or SUPABASE_ANON_KEY is missing (import.meta.env.VITE_SUPABASE_*)');
-    }
-    this.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      realtime: { params: { eventsPerSecond: 30 } }
-    });
+    const identity = getPeerIdentity();
+    this.peerId = identity.id;
+    this.peerName = identity.name;
+    this.peerColor = identity.color;
+    this.client = client || getClient();
+    this.requestInitialState = options.requestInitialState !== false;
   }
 
   get info() {
@@ -93,113 +128,212 @@ export class CollabSession {
   }
 
   async connect() {
-    if (!this.client) return;
-    this.channel = this.client.channel(`room:${this.roomId}`, {
+    if (this.channel) return;
+    const pendingCleanup = CollabSession.roomCleanup.get(this.roomId);
+    if (pendingCleanup) await pendingCleanup;
+    if (this.destroyed || this.channel) return;
+    this.destroyed = false;
+    this.setStatus('connecting');
+
+    const channel = this.client.channel(`room:${this.roomId}`, {
       config: { broadcast: { self: false }, presence: { key: this.peerId } }
     });
+    this.channel = channel;
 
-    this.channel
+    channel
       .on('broadcast', { event: 'ops' }, ({ payload }) => {
-        this.events.onRemoteOps(payload as CollabOps);
+        const envelope = payload as Envelope<CollabOps>;
+        if (!this.acceptEnvelope(envelope)) return;
+        this.events.onRemoteOps(envelope.payload);
+      })
+      .on('broadcast', { event: 'cursor' }, ({ payload }) => {
+        const envelope = payload as Envelope<PeerPresence>;
+        if (!this.acceptEnvelope(envelope)) return;
+        this.events.onRemoteCursor(envelope.payload);
+      })
+      .on('broadcast', { event: 'request-state' }, ({ payload }) => {
+        const envelope = payload as Envelope<{ requestId: string }>;
+        if (!this.acceptEnvelope(envelope) || !this.isStateLeader(envelope.senderId)) return;
+        this.events.onRequestFullState(envelope.payload.requestId);
       })
       .on('broadcast', { event: 'full-state' }, ({ payload }) => {
-        this.events.onRemoteFullState(payload);
+        const envelope = payload as Envelope<{ requestId: string; state: BoardState }>;
+        if (!this.acceptEnvelope(envelope) || envelope.payload.requestId !== this.pendingStateRequestId) return;
+        if (this.stateRequestTimer !== null) globalThis.clearTimeout(this.stateRequestTimer);
+        this.stateRequestTimer = null;
+        this.pendingStateRequestId = null;
+        const localOverlay = this.pendingSyncOps;
+        this.pendingSyncOps = {};
+        this.events.onRemoteFullState(applyBoardOps(envelope.payload.state, localOverlay));
+        // Idempotent upserts/deletes make this safe if an earlier delivery succeeded.
+        if (!isEmptyOps(localOverlay)) this.sendOps(localOverlay);
       })
-      .on('broadcast', { event: 'request-state' }, () => {
-        this.events.onRequestFullState();
-      })
-      .on('presence', { event: 'sync' }, () => {
-        const state = this.channel?.presenceState<PeerPresence & { phx_ref: string }>();
-        const peers: PeerPresence[] = Object.values(state || {})
-          .map(arr => arr[0])
-          .filter(Boolean)
-          .map((p: any) => ({ id: p.id, name: p.name, color: p.color, cursor: p.cursor, activeWorkspaceId: p.activeWorkspaceId }));
-        this.events.onPeersChanged(peers);
-      })
-      .subscribe(async (status) => {
+      .on('presence', { event: 'sync' }, () => this.syncPresence(channel))
+      .subscribe(async status => {
+        if (this.destroyed || channel !== this.channel) return;
         if (status === 'SUBSCRIBED') {
-          this.status = 'online';
-          this.reconnectAttempts = 0;
-          this.events.onStatusChanged(this.status);
-          await this.channel?.track({
-            id: this.peerId,
-            name: this.peerName,
-            color: this.peerColor,
-            cursor: null,
-            activeWorkspaceId: null
-          });
-          // Ask existing peers for current board state
-          this.channel?.send({ type: 'broadcast', event: 'request-state', payload: {} });
+          this.setStatus('online');
+          await channel.track({ id: this.peerId, name: this.peerName, color: this.peerColor });
+          if (this.destroyed || channel !== this.channel) return;
+          if (this.requestInitialState) this.requestFullState();
+          this.requestInitialState = true;
+          this.flushOps();
+          this.flushCursor();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          this.status = 'offline';
-          this.events.onStatusChanged(this.status);
-          this.scheduleReconnect();
+          // realtime-js owns reconnect/backoff; creating another channel here duplicates traffic.
+          this.setStatus('reconnecting');
         } else if (status === 'CLOSED') {
-          this.status = 'offline';
-          this.events.onStatusChanged(this.status);
-          this.scheduleReconnect();
+          this.setStatus(this.destroyed ? 'offline' : 'reconnecting');
         }
       });
   }
 
-  private scheduleReconnect() {
-    if (this.reconnectTimer !== null) return;
-    const delay = Math.min(2000 * Math.pow(2, this.reconnectAttempts), 30000);
-    this.reconnectAttempts++;
-    this.reconnectTimer = window.setTimeout(() => {
-      this.reconnectTimer = null;
-      // Re-create channel (old one was closed by server)
-      this.channel = null;
-      this.connect();
-    }, delay);
-  }
-
-  // --- Outgoing ops (local edits) ---
-
   sendOps(ops: CollabOps) {
-    this.channel?.send({ type: 'broadcast', event: 'ops', payload: ops });
+    if (isEmptyOps(ops)) return;
+    this.pendingOps = mergeOps(this.pendingOps, ops);
+    if (this.pendingStateRequestId) this.pendingSyncOps = mergeOps(this.pendingSyncOps, ops);
+    if (this.opsTimer !== null) return;
+    this.opsTimer = globalThis.setTimeout(() => {
+      this.opsTimer = null;
+      this.flushOps();
+    }, CollabSession.OPS_BATCH_MS);
   }
 
-  sendFullState(state: { points: Record<string, Point>; shapes: GeometricShape[]; texts: Record<string, TextLabel> }) {
-    this.channel?.send({ type: 'broadcast', event: 'full-state', payload: state });
-  }
-
-  setActiveWorkspace(workspaceId: string | null) {
-    this.channel?.track({ id: this.peerId, name: this.peerName, color: this.peerColor, cursor: null, activeWorkspaceId: workspaceId });
-  }
-
-  // --- Cursor presence (throttled to stay under Supabase's 5/sec presence limit) ---
-
-  private lastWorkspaceId: string | null = null;
-
-  updateCursor(cursor: { x: number; y: number } | null) {
+  sendCursor(cursor: { x: number; y: number } | null) {
     this.pendingCursor = cursor;
-    if (this.cursorThrottle !== null) return;
-    const now = Date.now();
-    const elapsed = now - this.lastTrackTime;
-    const wait = Math.max(0, CollabSession.PRESENCE_THROTTLE_MS - elapsed);
-    this.cursorThrottle = window.setTimeout(() => {
-      this.cursorThrottle = null;
-      this.lastTrackTime = Date.now();
-      if (this.pendingCursor) {
-        this.channel?.track({ id: this.peerId, name: this.peerName, color: this.peerColor, cursor: this.pendingCursor, activeWorkspaceId: this.lastWorkspaceId });
-      }
-      this.pendingCursor = null;
+    this.hasPendingCursor = true;
+
+    if (cursor === null) {
+      if (this.cursorTimer !== null) globalThis.clearTimeout(this.cursorTimer);
+      this.cursorTimer = null;
+      this.flushCursor();
+      return;
+    }
+
+    if (this.cursorTimer !== null) return;
+    const wait = Math.max(0, CollabSession.CURSOR_INTERVAL_MS - (Date.now() - this.lastCursorSentAt));
+    this.cursorTimer = globalThis.setTimeout(() => {
+      this.cursorTimer = null;
+      this.flushCursor();
     }, wait);
   }
 
-  disconnect() {
-    if (this.cursorThrottle !== null) {
-      window.clearTimeout(this.cursorThrottle);
-      this.cursorThrottle = null;
-    }
-    if (this.reconnectTimer !== null) {
-      window.clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    this.channel?.unsubscribe();
+  sendFullState(state: BoardState, requestId: string) {
+    this.sendEnvelope('full-state', { requestId, state });
+  }
+
+  async disconnect() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    if (this.cursorTimer !== null) globalThis.clearTimeout(this.cursorTimer);
+    if (this.opsTimer !== null) globalThis.clearTimeout(this.opsTimer);
+    if (this.stateRequestTimer !== null) globalThis.clearTimeout(this.stateRequestTimer);
+    this.cursorTimer = null;
+    this.opsTimer = null;
+    this.stateRequestTimer = null;
+    this.pendingOps = {};
+    this.pendingSyncOps = {};
+    this.hasPendingCursor = false;
+
+    const channel = this.channel;
     this.channel = null;
-    this.status = 'offline';
-    this.events.onStatusChanged(this.status);
+    if (channel) {
+      const cleanup = this.client.removeChannel(channel).finally(() => {
+        if (CollabSession.roomCleanup.get(this.roomId) === cleanup) {
+          CollabSession.roomCleanup.delete(this.roomId);
+        }
+      });
+      CollabSession.roomCleanup.set(this.roomId, cleanup);
+      await cleanup;
+    }
+    this.peerIds.clear();
+    this.events.onPeersChanged([]);
+    this.setStatus('offline');
+  }
+
+  private requestFullState() {
+    if (!this.pendingStateRequestId) {
+      this.pendingStateRequestId = crypto.randomUUID();
+      this.pendingSyncOps = mergeOps({}, this.pendingOps);
+      this.stateRequestAttempts = 0;
+    }
+    this.stateRequestAttempts++;
+    this.sendEnvelope('request-state', { requestId: this.pendingStateRequestId });
+
+    if (this.stateRequestTimer !== null) globalThis.clearTimeout(this.stateRequestTimer);
+    if (this.stateRequestAttempts >= 3) {
+      this.stateRequestTimer = globalThis.setTimeout(() => {
+        this.stateRequestTimer = null;
+        this.pendingStateRequestId = null;
+        this.pendingSyncOps = {};
+      }, 1000);
+      return;
+    }
+    this.stateRequestTimer = globalThis.setTimeout(() => {
+      this.stateRequestTimer = null;
+      if (this.pendingStateRequestId && this.status === 'online') this.requestFullState();
+    }, 1000);
+  }
+
+  private flushOps() {
+    if (this.status !== 'online' || isEmptyOps(this.pendingOps)) return;
+    const ops = this.pendingOps;
+    this.pendingOps = {};
+    this.sendEnvelope('ops', ops);
+  }
+
+  private flushCursor() {
+    if (this.status !== 'online' || !this.hasPendingCursor) return;
+    const cursor = this.pendingCursor;
+    this.hasPendingCursor = false;
+    this.lastCursorSentAt = Date.now();
+    this.sendEnvelope('cursor', {
+      id: this.peerId,
+      name: this.peerName,
+      color: this.peerColor,
+      cursor
+    });
+  }
+
+  private sendEnvelope<T>(event: string, payload: T) {
+    if (!this.channel || this.status !== 'online') return;
+    const envelope: Envelope<T> = {
+      senderId: this.peerId,
+      messageId: crypto.randomUUID(),
+      payload
+    };
+    void this.channel.send({ type: 'broadcast', event, payload: envelope });
+  }
+
+  private acceptEnvelope<T>(envelope: Envelope<T> | undefined) {
+    if (!envelope || envelope.senderId === this.peerId || !envelope.messageId) return false;
+    if (this.seenMessages.has(envelope.messageId)) return false;
+    this.seenMessages.add(envelope.messageId);
+    if (this.seenMessages.size > 1000) {
+      const oldest = this.seenMessages.values().next().value;
+      if (oldest) this.seenMessages.delete(oldest);
+    }
+    return true;
+  }
+
+  private syncPresence(channel: RealtimeChannel) {
+    const state = channel.presenceState<PeerPresence & { presence_ref?: string; phx_ref?: string }>();
+    const peersById = new Map<string, PeerPresence>();
+    Object.values(state).flat().forEach(peer => {
+      if (peer?.id) peersById.set(peer.id, { id: peer.id, name: peer.name, color: peer.color });
+    });
+    this.peerIds = new Set(peersById.keys());
+    this.events.onPeersChanged(Array.from(peersById.values()));
+  }
+
+  private isStateLeader(requesterId: string) {
+    const candidates = Array.from(this.peerIds).filter(id => id !== requesterId).sort();
+    return candidates[0] === this.peerId;
+  }
+
+  private setStatus(status: CollabStatus) {
+    if (status === this.status) return;
+    this.status = status;
+    this.events.onStatusChanged(status);
   }
 }

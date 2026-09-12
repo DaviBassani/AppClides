@@ -64,8 +64,10 @@ export const t = {
       stop: 'Encerrar compartilhamento',
       copied: 'Link copiado!',
       online: 'Ao vivo',
-      offline: 'Somente você',
-      connecting: 'Conectando...'
+      offline: 'Offline',
+      connecting: 'Conectando...',
+      reconnecting: 'Reconectando...',
+      collaborators: 'colaboradores'
     }
   },
   en: {
@@ -125,8 +127,10 @@ export const t = {
       stop: 'Stop sharing',
       copied: 'Link copied!',
       online: 'Live',
-      offline: 'Just you',
-      connecting: 'Connecting...'
+      offline: 'Offline',
+      connecting: 'Connecting...',
+      reconnecting: 'Reconnecting...',
+      collaborators: 'collaborators'
     }
   }
 };

@@ -4,54 +4,45 @@ import { PeerPresence } from '../../services/collab';
 interface LiveCursorsProps {
   peers: PeerPresence[];
   view: { x: number; y: number; k: number };
-  activeWorkspaceId: string;
 }
 
-// Renders remote peers' cursors in world space (inside the transformed <g>)
-const LiveCursors: React.FC<LiveCursorsProps> = ({ peers, view, activeWorkspaceId }) => {
-  const visualScale = 1 / view.k;
+// Screen-space rendering keeps cursors readable at every canvas zoom level.
+const LiveCursors: React.FC<LiveCursorsProps> = ({ peers, view }) => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none z-[5]">
+    {peers.map(peer => {
+      if (!peer.cursor) return null;
+      const left = peer.cursor.x * view.k + view.x;
+      const top = peer.cursor.y * view.k + view.y;
 
-  return (
-    <>
-      {peers.map(peer => {
-        if (!peer.cursor || peer.activeWorkspaceId !== activeWorkspaceId) return null;
-        return (
-          <g key={peer.id} transform={`translate(${peer.cursor.x}, ${peer.cursor.y})`}>
-            {/* Pointer arrow */}
+      return (
+        <div
+          key={peer.id}
+          data-live-cursor={peer.id}
+          className="absolute left-0 top-0 flex items-start will-change-transform"
+          style={{
+            transform: `translate3d(${left}px, ${top}px, 0)`,
+            transition: 'transform 480ms linear'
+          }}
+        >
+          <svg width="22" height="26" viewBox="0 0 22 26" aria-hidden="true">
             <path
-              d="M 0 0 L 0 16 Q 0 18 2 16 L 5.5 11 L 12 11 Q 14 11 12.5 8.5 L 3 -1 Q 1 -2.5 0 0 Z"
-              transform="scale(-1, -1) rotate(180)"
+              d="M2 2.5V20l4.8-4.7 3.5 7.2 3.6-1.8-3.4-6.9h6.8L2 2.5Z"
               fill={peer.color}
               stroke="white"
-              strokeWidth={0.8 * visualScale}
+              strokeWidth="2"
+              strokeLinejoin="round"
             />
-            {/* Name tag */}
-            <g transform="translate(10, 18)">
-              <rect
-                x={0}
-                y={0}
-                rx={3 * visualScale}
-                height={14 * visualScale}
-                width={peer.name.length * 6.5 * visualScale + 8 * visualScale}
-                fill={peer.color}
-                opacity={0.9}
-              />
-              <text
-                x={4 * visualScale}
-                y={10 * visualScale}
-                fontSize={9 * visualScale}
-                fill="white"
-                fontWeight={600}
-                style={{ userSelect: 'none' }}
-              >
-                {peer.name}
-              </text>
-            </g>
-          </g>
-        );
-      })}
-    </>
-  );
-};
+          </svg>
+          <span
+            className="mt-4 -ml-1 px-2 py-1 rounded-md text-[11px] leading-none font-semibold text-white shadow-sm whitespace-nowrap"
+            style={{ backgroundColor: peer.color }}
+          >
+            {peer.name}
+          </span>
+        </div>
+      );
+    })}
+  </div>
+);
 
 export default React.memo(LiveCursors);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, X, Layout } from 'lucide-react';
+import { Plus, X, Layout, Radio } from 'lucide-react';
 import clsx from 'clsx';
 import { Workspace } from '../types';
 import { Language, t } from '../utils/i18n';
@@ -76,6 +76,14 @@ const TabsBar: React.FC<TabsBarProps> = ({
               />
             ) : (
               <span className="truncate">{ws.name}</span>
+            )}
+
+            {ws.roomId && (
+              <Radio
+                size={11}
+                className="shrink-0 text-emerald-500"
+                aria-label={t[lang].share.online}
+              />
             )}
 
             {workspaces.length > 1 && (

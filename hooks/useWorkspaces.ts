@@ -3,14 +3,16 @@ import { Workspace, Point, GeometricShape, TextLabel } from '../types';
 import { generateId } from '../utils/geometry';
 import { storage } from '../utils/storage';
 import { getBrowserLanguage, t } from '../utils/i18n';
+import { applyBoardOps, diffBoards, type BoardState, type CollabOps } from '../services/collabProtocol';
 
-const createNewWorkspace = (name: string): Workspace => ({
+const createNewWorkspace = (name: string, roomId?: string): Workspace => ({
   id: generateId(),
   name,
   points: {},
   shapes: [],
   texts: {},
   createdAt: Date.now(),
+  roomId,
 });
 
 interface HistorySnapshot {
@@ -25,12 +27,11 @@ interface WorkspaceHistory {
 }
 
 export const useWorkspaces = () => {
-  // When true, mutations come from remote peers and must NOT enter local undo history
-  const remoteApplyRef = useRef(false);
+  const localOpsHandlerRef = useRef<((workspaceId: string, ops: CollabOps) => void) | null>(null);
   // --- State ---
 
   // Initialize state from storage or defaults
-  const [workspaces, setWorkspaces] = useState<Workspace[]>(() => {
+  const [workspaces, setWorkspacesState] = useState<Workspace[]>(() => {
     const saved = storage.load();
     if (saved && saved.workspaces.length > 0) {
       // Backwards compatibility: ensure 'texts' exists if loading old data
@@ -43,6 +44,14 @@ export const useWorkspaces = () => {
     const lang = getBrowserLanguage();
     return [createNewWorkspace(`${t[lang].tabs.untitled} 1`)];
   });
+  const workspacesRef = useRef(workspaces);
+  const setWorkspaces = useCallback((action: React.SetStateAction<Workspace[]>) => {
+    const next = typeof action === 'function'
+      ? (action as (previous: Workspace[]) => Workspace[])(workspacesRef.current)
+      : action;
+    workspacesRef.current = next;
+    setWorkspacesState(next);
+  }, []);
 
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(() => {
     const saved = storage.load();
@@ -88,11 +97,21 @@ export const useWorkspaces = () => {
     });
   }, []);
 
+  const setLocalOpsHandler = useCallback((handler: ((workspaceId: string, ops: CollabOps) => void) | null) => {
+    localOpsHandlerRef.current = handler;
+  }, []);
+
+  const emitLocalChange = useCallback((workspaceId: string, previous: BoardState, current: BoardState) => {
+    const ops = diffBoards(previous, current);
+    localOpsHandlerRef.current?.(workspaceId, ops);
+  }, []);
+
   // --- Actions ---
 
   const undo = useCallback(() => {
     // Use activeWorkspace.id to ensure we operate on the visible workspace
     const targetId = activeWorkspace.id;
+    const currentWorkspace = workspacesRef.current.find(ws => ws.id === targetId) || activeWorkspace;
     const wsHistory = getHistory(targetId);
     
     if (wsHistory.past.length === 0) return;
@@ -102,9 +121,9 @@ export const useWorkspaces = () => {
 
     // Save current state to future
     const currentSnapshot: HistorySnapshot = { 
-      points: activeWorkspace.points, 
-      shapes: activeWorkspace.shapes,
-      texts: activeWorkspace.texts
+      points: currentWorkspace.points,
+      shapes: currentWorkspace.shapes,
+      texts: currentWorkspace.texts
     };
 
     setHistory(prev => ({
@@ -120,10 +139,13 @@ export const useWorkspaces = () => {
       if (ws.id !== targetId) return ws;
       return { ...ws, points: previous.points, shapes: previous.shapes, texts: previous.texts };
     }));
-  }, [activeWorkspace, getHistory]);
+
+    emitLocalChange(targetId, currentSnapshot, previous);
+  }, [activeWorkspace, getHistory, emitLocalChange]);
 
   const redo = useCallback(() => {
     const targetId = activeWorkspace.id;
+    const currentWorkspace = workspacesRef.current.find(ws => ws.id === targetId) || activeWorkspace;
     const wsHistory = getHistory(targetId);
     
     if (wsHistory.future.length === 0) return;
@@ -133,9 +155,9 @@ export const useWorkspaces = () => {
 
     // Save current state to past
     const currentSnapshot: HistorySnapshot = { 
-      points: activeWorkspace.points, 
-      shapes: activeWorkspace.shapes,
-      texts: activeWorkspace.texts
+      points: currentWorkspace.points,
+      shapes: currentWorkspace.shapes,
+      texts: currentWorkspace.texts
     };
 
     setHistory(prev => ({
@@ -151,139 +173,141 @@ export const useWorkspaces = () => {
       if (ws.id !== targetId) return ws;
       return { ...ws, points: next.points, shapes: next.shapes, texts: next.texts };
     }));
-  }, [activeWorkspace, getHistory]);
+
+    emitLocalChange(targetId, currentSnapshot, next);
+  }, [activeWorkspace, getHistory, emitLocalChange]);
 
   // --- State Modifiers (Wrapped to support Undo) ---
 
   const updatePoints = useCallback((action: React.SetStateAction<Record<string, Point>>) => {
     const targetId = activeWorkspace.id;
+    const currentWorkspace = workspacesRef.current.find(ws => ws.id === targetId) || activeWorkspace;
 
     // 1. Calculate new state
-    const currentPoints = activeWorkspace.points;
+    const currentPoints = currentWorkspace.points;
     const newPoints = typeof action === 'function' ? (action as Function)(currentPoints) : action;
 
     // If no change, do nothing
     if (currentPoints === newPoints) return;
 
-    // 2. Save snapshot of OLD state (only for local edits)
-    if (!remoteApplyRef.current) {
-      saveSnapshot(targetId, currentPoints, activeWorkspace.shapes, activeWorkspace.texts);
-    }
+    // 2. Save snapshot of OLD state
+    saveSnapshot(targetId, currentPoints, currentWorkspace.shapes, currentWorkspace.texts);
 
     // 3. Update state
     setWorkspaces(prev => prev.map(ws => {
       if (ws.id !== targetId) return ws;
       return { ...ws, points: newPoints };
     }));
-  }, [activeWorkspace, saveSnapshot]);
+
+    emitLocalChange(
+      targetId,
+      { points: currentPoints, shapes: currentWorkspace.shapes, texts: currentWorkspace.texts },
+      { points: newPoints, shapes: currentWorkspace.shapes, texts: currentWorkspace.texts }
+    );
+  }, [activeWorkspace, saveSnapshot, emitLocalChange]);
 
   const updateShapes = useCallback((action: React.SetStateAction<GeometricShape[]>) => {
     const targetId = activeWorkspace.id;
+    const currentWorkspace = workspacesRef.current.find(ws => ws.id === targetId) || activeWorkspace;
 
     // 1. Calculate new state
-    const currentShapes = activeWorkspace.shapes;
+    const currentShapes = currentWorkspace.shapes;
     const newShapes = typeof action === 'function' ? (action as Function)(currentShapes) : action;
 
     if (currentShapes === newShapes) return;
 
-    // 2. Save snapshot of OLD state (only for local edits)
-    if (!remoteApplyRef.current) {
-      saveSnapshot(targetId, activeWorkspace.points, currentShapes, activeWorkspace.texts);
-    }
+    // 2. Save snapshot of OLD state
+    saveSnapshot(targetId, currentWorkspace.points, currentShapes, currentWorkspace.texts);
 
     // 3. Update state
     setWorkspaces(prev => prev.map(ws => {
       if (ws.id !== targetId) return ws;
       return { ...ws, shapes: newShapes };
     }));
-  }, [activeWorkspace, saveSnapshot]);
+
+    emitLocalChange(
+      targetId,
+      { points: currentWorkspace.points, shapes: currentShapes, texts: currentWorkspace.texts },
+      { points: currentWorkspace.points, shapes: newShapes, texts: currentWorkspace.texts }
+    );
+  }, [activeWorkspace, saveSnapshot, emitLocalChange]);
 
   const updateTexts = useCallback((action: React.SetStateAction<Record<string, TextLabel>>) => {
     const targetId = activeWorkspace.id;
+    const currentWorkspace = workspacesRef.current.find(ws => ws.id === targetId) || activeWorkspace;
 
-    const currentTexts = activeWorkspace.texts || {};
+    const currentTexts = currentWorkspace.texts || {};
     const newTexts = typeof action === 'function' ? (action as Function)(currentTexts) : action;
 
     if (currentTexts === newTexts) return;
 
-    if (!remoteApplyRef.current) {
-      saveSnapshot(targetId, activeWorkspace.points, activeWorkspace.shapes, currentTexts);
-    }
+    saveSnapshot(targetId, currentWorkspace.points, currentWorkspace.shapes, currentTexts);
 
     setWorkspaces(prev => prev.map(ws => {
       if (ws.id !== targetId) return ws;
       return { ...ws, texts: newTexts };
     }));
-  }, [activeWorkspace, saveSnapshot]);
 
-  // Apply remote ops without touching local undo history
-  const applyRemoteOps = useCallback((apply: (remoteApplyRef: React.MutableRefObject<boolean>) => void) => {
-    remoteApplyRef.current = true;
-    try {
-      apply(remoteApplyRef);
-    } finally {
-      remoteApplyRef.current = false;
-    }
-  }, []);
+    emitLocalChange(
+      targetId,
+      { points: currentWorkspace.points, shapes: currentWorkspace.shapes, texts: currentTexts },
+      { points: currentWorkspace.points, shapes: currentWorkspace.shapes, texts: newTexts }
+    );
+  }, [activeWorkspace, saveSnapshot, emitLocalChange]);
 
 
   const clearActiveWorkspace = useCallback(() => {
     const targetId = activeWorkspace.id;
+    const currentWorkspace = workspacesRef.current.find(ws => ws.id === targetId) || activeWorkspace;
     
     // Check if already empty
-    const isEmpty = Object.keys(activeWorkspace.points).length === 0 && activeWorkspace.shapes.length === 0 && Object.keys(activeWorkspace.texts || {}).length === 0;
+    const isEmpty = Object.keys(currentWorkspace.points).length === 0 && currentWorkspace.shapes.length === 0 && Object.keys(currentWorkspace.texts || {}).length === 0;
     if (isEmpty) return;
 
-    saveSnapshot(targetId, activeWorkspace.points, activeWorkspace.shapes, activeWorkspace.texts);
+    saveSnapshot(targetId, currentWorkspace.points, currentWorkspace.shapes, currentWorkspace.texts);
+
+    const cleared: BoardState = { points: {}, shapes: [], texts: {} };
 
     setWorkspaces(prev => prev.map(ws => {
       if (ws.id !== targetId) return ws;
-      return { ...ws, points: {}, shapes: [], texts: {} };
+      return { ...ws, ...cleared };
     }));
-  }, [activeWorkspace, saveSnapshot]);
+
+    emitLocalChange(targetId, currentWorkspace, cleared);
+  }, [activeWorkspace, saveSnapshot, emitLocalChange]);
 
   const deleteSelection = useCallback((selectedIds: string[]) => {
-      if (selectedIds.length === 0) return;
-      const targetId = activeWorkspace.id;
+    if (selectedIds.length === 0) return;
+    const targetId = activeWorkspace.id;
+    const currentWorkspace = workspacesRef.current.find(ws => ws.id === targetId) || activeWorkspace;
+    const shapesToDelete = new Set<string>();
+    const pointsToDelete = new Set<string>();
+    const textsToDelete = new Set<string>();
 
-      saveSnapshot(targetId, activeWorkspace.points, activeWorkspace.shapes, activeWorkspace.texts);
+    selectedIds.forEach(id => {
+      if (currentWorkspace.points[id]) pointsToDelete.add(id);
+      if (currentWorkspace.texts?.[id]) textsToDelete.add(id);
+      if (currentWorkspace.shapes.some(shape => shape.id === id)) shapesToDelete.add(id);
+    });
 
-      setWorkspaces(prev => prev.map(ws => {
-          if (ws.id !== targetId) return ws;
+    currentWorkspace.shapes.forEach(shape => {
+      if (pointsToDelete.has(shape.p1) || pointsToDelete.has(shape.p2)) shapesToDelete.add(shape.id);
+    });
 
-          // Logic:
-          // 1. Identify shapes/texts explicitly selected for deletion.
-          // 2. Identify points explicitly selected for deletion.
-          // 3. Identify shapes connected to those points (cascade delete).
-          
-          let shapesToDelete = new Set<string>();
-          const pointsToDelete = new Set<string>();
-          const textsToDelete = new Set<string>();
+    const points = { ...currentWorkspace.points };
+    pointsToDelete.forEach(id => delete points[id]);
+    const texts = { ...currentWorkspace.texts };
+    textsToDelete.forEach(id => delete texts[id]);
+    const next: BoardState = {
+      points,
+      shapes: currentWorkspace.shapes.filter(shape => !shapesToDelete.has(shape.id)),
+      texts
+    };
 
-          selectedIds.forEach(id => {
-              if (ws.points[id]) pointsToDelete.add(id);
-              if (ws.texts && ws.texts[id]) textsToDelete.add(id);
-              if (ws.shapes.find(s => s.id === id)) shapesToDelete.add(id);
-          });
-
-          // If a point is deleted, all shapes connected to it must be deleted
-          ws.shapes.forEach(s => {
-              if (pointsToDelete.has(s.p1) || pointsToDelete.has(s.p2)) {
-                  shapesToDelete.add(s.id);
-              }
-          });
-
-          const newShapes = ws.shapes.filter(s => !shapesToDelete.has(s.id));
-          
-          const newPoints = { ...ws.points };
-          pointsToDelete.forEach(id => delete newPoints[id]);
-
-          const newTexts = { ...ws.texts };
-          textsToDelete.forEach(id => delete newTexts[id]);
-
-          return { ...ws, shapes: newShapes, points: newPoints, texts: newTexts };
-      }));
-  }, [activeWorkspace, saveSnapshot]);
+    saveSnapshot(targetId, currentWorkspace.points, currentWorkspace.shapes, currentWorkspace.texts);
+    setWorkspaces(prev => prev.map(ws => ws.id === targetId ? { ...ws, ...next } : ws));
+    emitLocalChange(targetId, currentWorkspace, next);
+  }, [activeWorkspace, saveSnapshot, emitLocalChange]);
 
   // --- Workspace Management ---
 
@@ -317,6 +341,63 @@ export const useWorkspaces = () => {
     setWorkspaces(prev => prev.map(ws => ws.id === id ? { ...ws, name: newName } : ws));
   }, []);
 
+  const setWorkspaceRoom = useCallback((workspaceId: string, roomId: string | null) => {
+    setWorkspaces(prev => prev.map(ws =>
+      ws.id === workspaceId ? { ...ws, roomId: roomId || undefined } : ws
+    ));
+  }, []);
+
+  const joinRoom = useCallback((roomId: string, defaultName: string) => {
+    const existing = workspaces.find(ws => ws.roomId === roomId);
+    if (existing) {
+      setActiveWorkspaceId(existing.id);
+      return;
+    }
+
+    const canReuseActive = !activeWorkspace.roomId &&
+      Object.keys(activeWorkspace.points).length === 0 &&
+      activeWorkspace.shapes.length === 0 &&
+      Object.keys(activeWorkspace.texts || {}).length === 0;
+
+    if (canReuseActive) {
+      setWorkspaceRoom(activeWorkspace.id, roomId);
+      return;
+    }
+
+    const sharedWorkspace = createNewWorkspace(defaultName, roomId);
+    setWorkspaces(prev => [...prev, sharedWorkspace]);
+    setActiveWorkspaceId(sharedWorkspace.id);
+  }, [workspaces, activeWorkspace, setWorkspaceRoom]);
+
+  const applyRemoteOpsToRoom = useCallback((roomId: string, ops: CollabOps) => {
+    const workspace = workspacesRef.current.find(ws => ws.roomId === roomId);
+    if (!workspace) return;
+
+    setWorkspaces(prev => prev.map(ws =>
+      ws.id === workspace.id ? { ...ws, ...applyBoardOps(ws, ops) } : ws
+    ));
+    // Rebase remote changes through local history so undo never deletes peer work.
+    setHistory(prev => {
+      const current = prev[workspace.id];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [workspace.id]: {
+          past: current.past.map(snapshot => applyBoardOps(snapshot, ops)),
+          future: current.future.map(snapshot => applyBoardOps(snapshot, ops))
+        }
+      };
+    });
+  }, []);
+
+  const applyRemoteStateToRoom = useCallback((roomId: string, state: BoardState) => {
+    const workspace = workspacesRef.current.find(ws => ws.roomId === roomId);
+    if (!workspace) return;
+    setWorkspaces(prev => prev.map(ws => ws.id === workspace.id ? { ...ws, ...state } : ws));
+    // A full snapshot has no safe inverse relative to existing local history.
+    setHistory(prev => ({ ...prev, [workspace.id]: { past: [], future: [] } }));
+  }, []);
+
   return {
     workspaces,
     activeWorkspaceId,
@@ -328,7 +409,11 @@ export const useWorkspaces = () => {
     updatePoints,
     updateShapes,
     updateTexts,
-    applyRemoteOps,
+    setLocalOpsHandler,
+    setWorkspaceRoom,
+    joinRoom,
+    applyRemoteOpsToRoom,
+    applyRemoteStateToRoom,
     clearActiveWorkspace,
     deleteSelection,
     undo,
