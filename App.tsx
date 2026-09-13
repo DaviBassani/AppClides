@@ -30,19 +30,16 @@ const App: React.FC = () => {
   const {
     workspaces, activeWorkspaceId, activeWorkspace, setActiveWorkspaceId,
     addWorkspace, removeWorkspace, renameWorkspace,
-    updatePoints, updateShapes, updateTexts, clearActiveWorkspace, deleteSelection,
+    updatePoints, updateShapes, updateTexts, updateBoard, clearActiveWorkspace, deleteSelection,
     setLocalOpsHandler, setWorkspaceRoom, joinRoom,
     applyRemoteOpsToRoom, applyRemoteStateToRoom,
     undo, redo, canUndo, canRedo
   } = useWorkspaces();
 
-  // Cursor world position from Canvas (shared to peers via bounded Broadcast)
-  const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null);
-
   // Realtime collaboration session
   const {
     peers, status, isSharing, localPeer,
-    startSharing, stopSharing, copyShareLink, renamePeer
+    startSharing, stopSharing, copyShareLink, renamePeer, updateCursor
   } = useCollab({
     workspaces,
     activeWorkspace,
@@ -51,7 +48,6 @@ const App: React.FC = () => {
     joinRoom,
     applyRemoteOpsToRoom,
     applyRemoteStateToRoom,
-    cursorWorld,
     lang
   });
 
@@ -181,6 +177,7 @@ const App: React.FC = () => {
             setPoints={updatePoints}
             setShapes={updateShapes}
             setTexts={updateTexts}
+            updateBoard={updateBoard}
             view={view}
             setView={setView}
             showGrid={showGrid}
@@ -191,16 +188,14 @@ const App: React.FC = () => {
             setSelectedIds={setSelectedIds}
             // Collaboration
             peers={peers}
-            onCursorMove={setCursorWorld}
+            onCursorMove={updateCursor}
           />
         </main>
       </div>
 
       <Chat 
         activeWorkspace={activeWorkspace}
-        setPoints={updatePoints}
-        setShapes={updateShapes}
-        setTexts={updateTexts}
+        updateBoard={updateBoard}
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
         lang={lang}

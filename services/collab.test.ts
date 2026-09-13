@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CollabSession, type CollabEvents } from './collab';
+import { CollabSession, isSafeRoomId, type CollabEvents } from './collab';
 
 class FakeChannel {
   sent: Array<{ type: string; event: string; payload: unknown }> = [];
@@ -80,7 +80,7 @@ describe('CollabSession traffic budget', () => {
 
   it('tracks Presence once on join and never for cursor movement', async () => {
     const client = new FakeClient();
-    const session = new CollabSession('room', events(), client as any);
+    const session = new CollabSession('test-room', events(), client as any);
     session.connect();
     client.channelInstance.emitStatus('SUBSCRIBED');
     await vi.runAllTicks();
@@ -95,7 +95,7 @@ describe('CollabSession traffic budget', () => {
 
   it('caps continuous cursor traffic at two broadcasts per second', async () => {
     const client = new FakeClient();
-    const session = new CollabSession('room', events(), client as any);
+    const session = new CollabSession('test-room', events(), client as any);
     session.connect();
     client.channelInstance.emitStatus('SUBSCRIBED');
     await vi.runAllTicks();
@@ -112,7 +112,7 @@ describe('CollabSession traffic budget', () => {
 
   it('batches rapid board operations into one message', async () => {
     const client = new FakeClient();
-    const session = new CollabSession('room', events(), client as any);
+    const session = new CollabSession('test-room', events(), client as any);
     session.connect();
     client.channelInstance.emitStatus('SUBSCRIBED');
     await vi.runAllTicks();
@@ -129,7 +129,7 @@ describe('CollabSession traffic budget', () => {
   it('does not create another channel when realtime-js reports an error', () => {
     const client = new FakeClient();
     const onStatusChanged = vi.fn();
-    const session = new CollabSession('room', { ...events(), onStatusChanged }, client as any);
+    const session = new CollabSession('test-room', { ...events(), onStatusChanged }, client as any);
     session.connect();
 
     client.channelInstance.emitStatus('CHANNEL_ERROR');
@@ -141,7 +141,7 @@ describe('CollabSession traffic budget', () => {
 
   it('removes its channel on disconnect', async () => {
     const client = new FakeClient();
-    const session = new CollabSession('room', events(), client as any);
+    const session = new CollabSession('test-room', events(), client as any);
     session.connect();
     client.channelInstance.emitStatus('SUBSCRIBED');
 
@@ -153,7 +153,7 @@ describe('CollabSession traffic budget', () => {
 
   it('updates a display name with one explicit Presence call', async () => {
     const client = new FakeClient();
-    const session = new CollabSession('room', events(), client as any);
+    const session = new CollabSession('test-room', events(), client as any);
     session.connect();
     client.channelInstance.emitStatus('SUBSCRIBED');
     await vi.runAllTicks();
@@ -171,7 +171,7 @@ describe('CollabSession traffic budget', () => {
   it('rebases local edits over an incoming initial snapshot', async () => {
     const client = new FakeClient();
     const onRemoteFullState = vi.fn();
-    const session = new CollabSession('room', { ...events(), onRemoteFullState }, client as any);
+    const session = new CollabSession('test-room', { ...events(), onRemoteFullState }, client as any);
     session.connect();
     client.channelInstance.emitStatus('SUBSCRIBED');
     await vi.runAllTicks();
@@ -198,5 +198,46 @@ describe('CollabSession traffic budget', () => {
       shapes: [],
       texts: {}
     });
+  });
+
+  it('drops malformed remote payloads at the transport boundary', () => {
+    const client = new FakeClient();
+    const onRemoteOps = vi.fn();
+    const onRemotePeer = vi.fn();
+    const session = new CollabSession('test-room', { ...events(), onRemoteOps, onRemotePeer }, client as any);
+    session.connect();
+
+    client.channelInstance.emitBroadcast('ops', {
+      senderId: 'remote-peer',
+      messageId: 'message-1',
+      payload: { shapesUpsert: { id: 'not-an-array' } }
+    });
+    client.channelInstance.emitBroadcast('profile', {
+      senderId: 'remote-peer',
+      messageId: 'message-2',
+      payload: { id: 'remote-peer', name: 'Attacker', color: 'javascript:alert(1)' }
+    });
+    client.channelInstance.emitBroadcast('profile', {
+      senderId: 'remote-peer',
+      messageId: 'message-3',
+      payload: { id: 'impersonated-peer', name: 'Attacker', color: '#3b82f6' }
+    });
+
+    expect(onRemoteOps).not.toHaveBeenCalled();
+    expect(onRemotePeer).not.toHaveBeenCalled();
+  });
+});
+
+describe('collaboration room IDs', () => {
+  it('accepts generated UUIDs and legacy room IDs', () => {
+    expect(isSafeRoomId(crypto.randomUUID())).toBe(true);
+    expect(isSafeRoomId('deadbeef')).toBe(true);
+  });
+
+  it('rejects short, oversized, and structured room values', () => {
+    expect(isSafeRoomId('room')).toBe(false);
+    expect(isSafeRoomId('../secret')).toBe(false);
+    expect(isSafeRoomId('<script>alert(1)</script>')).toBe(false);
+    expect(isSafeRoomId('a'.repeat(129))).toBe(false);
   });
 });

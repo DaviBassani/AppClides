@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { applyBoardOps, diffBoards, isEmptyOps, mergeOps, type BoardState } from './collabProtocol';
+import {
+  applyBoardOps,
+  diffBoards,
+  isEmptyOps,
+  mergeOps,
+  parseBoardState,
+  parseCollabOps,
+  sanitizePeer,
+  splitCollabOps,
+  type BoardState
+} from './collabProtocol';
 
 const emptyBoard = (): BoardState => ({ points: {}, shapes: [], texts: {} });
 
@@ -34,5 +44,53 @@ describe('collaboration protocol', () => {
     const pending = { pointsUpsert: { p1: { id: 'p1', x: 10, y: 20 } } };
 
     expect(mergeOps(pending, { pointsDelete: ['p1'] })).toEqual({ pointsDelete: ['p1'] });
+  });
+
+  it('rejects malformed or non-finite remote operations', () => {
+    expect(parseCollabOps({ shapesUpsert: { id: 'shape' } })).toBeNull();
+    expect(parseCollabOps({ pointsUpsert: { p1: { id: 'p1', x: Infinity, y: 0 } } })).toBeNull();
+    expect(parseCollabOps({ unknownField: [] })).toBeNull();
+  });
+
+  it('rejects prototype keys and oversized text operations', () => {
+    const polluted = JSON.parse('{"pointsUpsert":{"__proto__":{"id":"__proto__","x":0,"y":0}}}');
+    expect(parseCollabOps(polluted)).toBeNull();
+    expect(parseCollabOps({
+      textsUpsert: Object.fromEntries(Array.from({ length: 30 }, (_, index) => [
+        `t${index}`,
+        { id: `t${index}`, x: 0, y: 0, content: 'x'.repeat(2_000) }
+      ]))
+    })).toBeNull();
+  });
+
+  it('validates full states and point references', () => {
+    expect(parseBoardState({ points: {}, texts: {}, shapes: [{ id: 's1', type: 'line', p1: 'p1', p2: 'p2' }] })).toBeNull();
+    expect(parseBoardState(emptyBoard())).toEqual(emptyBoard());
+  });
+
+  it('does not apply remote shapes with missing point references', () => {
+    const result = applyBoardOps(emptyBoard(), {
+      shapesUpsert: [{ id: 's1', type: 'line', p1: 'missing-1', p2: 'missing-2' }]
+    });
+    expect(result.shapes).toEqual([]);
+  });
+
+  it('sanitizes peer names and rejects unsafe colors', () => {
+    expect(sanitizePeer({ id: 'peer-123', name: '  Davi\u0000 Bassani  ', color: '#3b82f6' })).toEqual({
+      id: 'peer-123',
+      name: 'Davi Bassani',
+      color: '#3b82f6',
+      cursor: undefined
+    });
+    expect(sanitizePeer({ id: 'peer-123', name: 'Davi', color: 'javascript:alert(1)' })).toBeNull();
+  });
+
+  it('chunks large operations without dropping entities', () => {
+    const ops = { pointsDelete: Array.from({ length: 1_201 }, (_, index) => `p${index}`) };
+    const chunks = splitCollabOps(ops);
+
+    expect(chunks).toHaveLength(3);
+    expect(chunks.flatMap(chunk => chunk.pointsDelete || [])).toEqual(ops.pointsDelete);
+    expect(chunks.every(chunk => parseCollabOps(chunk) !== null)).toBe(true);
   });
 });

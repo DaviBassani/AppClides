@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Share2, Users, Wifi, WifiOff, Loader2, Copy, X, Pencil } from 'lucide-react';
 import clsx from 'clsx';
 import { CollabStatus, PeerPresence } from '../services/collab';
+import { MAX_PEER_NAME_LENGTH } from '../services/collabProtocol';
 import { Language, t } from '../utils/i18n';
 
 interface ShareBarProps {
@@ -23,6 +24,7 @@ const ShareBar: React.FC<ShareBarProps> = ({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [draftName, setDraftName] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const s = t[lang].share;
 
   useEffect(() => {
@@ -41,10 +43,18 @@ const ShareBar: React.FC<ShareBarProps> = ({
     };
   }, [isProfileOpen]);
 
+  useEffect(() => () => {
+    if (copiedTimerRef.current !== null) globalThis.clearTimeout(copiedTimerRef.current);
+  }, []);
+
   const handleCopy = () => {
     onCopy();
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (copiedTimerRef.current !== null) globalThis.clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = globalThis.setTimeout(() => {
+      copiedTimerRef.current = null;
+      setCopied(false);
+    }, 2000);
   };
 
   const isOnline = isSharing && status === 'online';
@@ -182,7 +192,7 @@ const ShareBar: React.FC<ShareBarProps> = ({
           <input
             id="collab-display-name"
             autoFocus
-            maxLength={32}
+            maxLength={MAX_PEER_NAME_LENGTH}
             value={draftName}
             onChange={event => setDraftName(event.target.value)}
             placeholder={s.namePlaceholder}

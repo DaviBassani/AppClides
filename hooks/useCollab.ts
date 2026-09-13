@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   CollabSession,
   CollabStatus,
@@ -18,7 +18,6 @@ interface UseCollabProps {
   joinRoom: (roomId: string, defaultName: string) => void;
   applyRemoteOpsToRoom: (roomId: string, ops: CollabOps) => void;
   applyRemoteStateToRoom: (roomId: string, state: BoardState) => void;
-  cursorWorld: { x: number; y: number } | null;
   lang: Language;
 }
 
@@ -30,7 +29,6 @@ export const useCollab = ({
   joinRoom,
   applyRemoteOpsToRoom,
   applyRemoteStateToRoom,
-  cursorWorld,
   lang
 }: UseCollabProps) => {
   const [pendingInitialRoom, setPendingInitialRoom] = useState<string | null>(() => getRoomFromUrl());
@@ -47,9 +45,11 @@ export const useCollab = ({
   const workspacesRef = useRef(workspaces);
   const actionsRef = useRef({ applyRemoteOpsToRoom, applyRemoteStateToRoom });
 
-  roomIdRef.current = roomId;
-  workspacesRef.current = workspaces;
-  actionsRef.current = { applyRemoteOpsToRoom, applyRemoteStateToRoom };
+  useLayoutEffect(() => {
+    roomIdRef.current = roomId;
+    workspacesRef.current = workspaces;
+    actionsRef.current = { applyRemoteOpsToRoom, applyRemoteStateToRoom };
+  }, [roomId, workspaces, applyRemoteOpsToRoom, applyRemoteStateToRoom]);
 
   // A shared URL opens in a dedicated/reusable workspace before remote state arrives.
   useEffect(() => {
@@ -148,14 +148,12 @@ export const useCollab = ({
     };
   }, [roomId]);
 
-  // Cursors are Broadcast messages scoped by room, never Presence updates.
-  useEffect(() => {
-    if (!roomId || activeWorkspace.roomId !== roomId) return;
-    sessionRef.current?.sendCursor(cursorWorld);
-  }, [cursorWorld, roomId, activeWorkspace.roomId]);
+  const updateCursor = useCallback((cursor: { x: number; y: number } | null) => {
+    sessionRef.current?.sendCursor(cursor);
+  }, []);
 
   const startSharing = useCallback(() => {
-    const room = crypto.randomUUID().slice(0, 8);
+    const room = crypto.randomUUID();
     newRoomsRef.current.add(room);
     setWorkspaceRoom(activeWorkspace.id, room);
     setRoomInUrl(room);
@@ -179,7 +177,7 @@ export const useCollab = ({
     setLocalPeer(profile);
   }, []);
 
-  const localPeerId = sessionRef.current?.info.id;
+  const localPeerId = localPeer?.id;
   const remotePeers = peers.filter(peer => peer.id !== localPeerId);
 
   return {
@@ -188,10 +186,10 @@ export const useCollab = ({
     isSharing: !!roomId,
     localPeer,
     roomId,
-    shareLink: roomId ? `${window.location.origin}${window.location.pathname}?room=${roomId}` : null,
     startSharing,
     stopSharing,
     copyShareLink,
-    renamePeer
+    renamePeer,
+    updateCursor
   };
 };

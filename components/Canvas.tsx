@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import { ToolType, Point, GeometricShape, TextLabel } from '../types';
+import { ToolType, Point, GeometricShape, TextLabel, BoardState, ShapeType } from '../types';
 import clsx from 'clsx';
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction';
 import Grid from './canvas/Grid';
@@ -21,6 +21,7 @@ interface CanvasProps {
   setPoints: React.Dispatch<React.SetStateAction<Record<string, Point>>>;
   setShapes: React.Dispatch<React.SetStateAction<GeometricShape[]>>;
   setTexts: React.Dispatch<React.SetStateAction<Record<string, TextLabel>>>;
+  updateBoard: React.Dispatch<React.SetStateAction<BoardState>>;
   view: { x: number; y: number; k: number };
   setView: React.Dispatch<React.SetStateAction<{ x: number; y: number; k: number }>>;
   showGrid: boolean;
@@ -40,6 +41,7 @@ const Canvas: React.FC<CanvasProps> = ({
   setPoints,
   setShapes,
   setTexts,
+  updateBoard,
   view,
   setView,
   showGrid,
@@ -53,6 +55,7 @@ const Canvas: React.FC<CanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   
   const {
     handleMouseDown, handleMouseMove, handleMouseUp,
@@ -74,22 +77,25 @@ const Canvas: React.FC<CanvasProps> = ({
         : "cursor-crosshair";
 
   const handleUpdateColor = (color: string) => {
-      setPoints(prev => {
-          const next = { ...prev };
-          Object.keys(next).forEach(id => {
-              if (selectedIds.includes(id)) next[id] = { ...next[id], color };
-          });
-          return next;
-      });
-      setShapes(prev => prev.map(s => selectedIds.includes(s.id) ? { ...s, color } : s));
-      setTexts(prev => {
-          const next = { ...prev };
-          Object.keys(next).forEach(id => {
-              if (selectedIds.includes(id)) next[id] = { ...next[id], color };
-          });
-          return next;
-      });
+      if (selectedIdSet.size === 0) return;
+      updateBoard(current => ({
+        points: Object.fromEntries(Object.entries(current.points).map(([id, point]) => [
+          id,
+          selectedIdSet.has(id) ? { ...point, color } : point
+        ])),
+        shapes: current.shapes.map(shape => selectedIdSet.has(shape.id) ? { ...shape, color } : shape),
+        texts: Object.fromEntries(Object.entries(current.texts).map(([id, text]) => [
+          id,
+          selectedIdSet.has(id) ? { ...text, color } : text
+        ]))
+      }));
   };
+
+  const draftShapeType: ShapeType | null = tool === ToolType.SEGMENT ? 'segment'
+    : tool === ToolType.LINE ? 'line'
+      : tool === ToolType.RAY ? 'ray'
+        : tool === ToolType.CIRCLE ? 'circle'
+          : null;
 
   // Focus textarea when editing starts
   useEffect(() => {
@@ -182,7 +188,7 @@ const Canvas: React.FC<CanvasProps> = ({
                         p1={p1}
                         p2={p2}
                         strokeWidth={strokeWidth}
-                        isSelected={selectedIds.includes(shape.id)}
+                        isSelected={selectedIdSet.has(shape.id)}
                         viewportBounds={viewportBounds}
                     />
                 );
@@ -195,15 +201,15 @@ const Canvas: React.FC<CanvasProps> = ({
                         key={text.id} 
                         text={text} 
                         visualScale={visualScale}
-                        isSelected={selectedIds.includes(text.id)}
+                        isSelected={selectedIdSet.has(text.id)}
                     />
                 )
             ))}
 
             {/* Render Ghost Shape */}
-            {draftStartId && points[draftStartId] && (
+            {draftShapeType && draftStartId && points[draftStartId] && (
                 <GhostShapeRenderer
-                    type={tool.toLowerCase() as any}
+                    type={draftShapeType}
                     p1={points[draftStartId]}
                     cursor={cursor}
                     strokeWidth={strokeWidth}
@@ -232,7 +238,7 @@ const Canvas: React.FC<CanvasProps> = ({
                     radius={pointRadius}
                     hoverRadius={pointHoverRadius}
                     isActive={hoveredId === p.id || draftStartId === p.id || draggingId === p.id}
-                    isSelected={selectedIds.includes(p.id)}
+                    isSelected={selectedIdSet.has(p.id)}
                     isDraftStart={draftStartId === p.id}
                     strokeWidth={strokeWidth}
                     visualScale={visualScale}

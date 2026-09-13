@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Workspace, Point, GeometricShape, TextLabel } from '../types';
+import { Workspace, Point, GeometricShape, TextLabel, BoardState } from '../types';
 import { generateId } from '../utils/geometry';
 import { storage } from '../utils/storage';
 import { getBrowserLanguage, t } from '../utils/i18n';
-import { applyBoardOps, diffBoards, type BoardState, type CollabOps } from '../services/collabProtocol';
+import { applyBoardOps, diffBoards, type CollabOps } from '../services/collabProtocol';
 
 const createNewWorkspace = (name: string, roomId?: string): Workspace => ({
   id: generateId(),
@@ -25,6 +25,9 @@ interface WorkspaceHistory {
   past: HistorySnapshot[];
   future: HistorySnapshot[];
 }
+
+const resolveStateAction = <T>(action: React.SetStateAction<T>, current: T): T =>
+  typeof action === 'function' ? (action as (previous: T) => T)(current) : action;
 
 export const useWorkspaces = () => {
   const localOpsHandlerRef = useRef<((workspaceId: string, ops: CollabOps) => void) | null>(null);
@@ -179,81 +182,33 @@ export const useWorkspaces = () => {
 
   // --- State Modifiers (Wrapped to support Undo) ---
 
-  const updatePoints = useCallback((action: React.SetStateAction<Record<string, Point>>) => {
+  const updateBoard = useCallback((action: React.SetStateAction<BoardState>) => {
     const targetId = activeWorkspace.id;
     const currentWorkspace = workspacesRef.current.find(ws => ws.id === targetId) || activeWorkspace;
+    const current: BoardState = {
+      points: currentWorkspace.points,
+      shapes: currentWorkspace.shapes,
+      texts: currentWorkspace.texts
+    };
+    const next = resolveStateAction(action, current);
+    if (current.points === next.points && current.shapes === next.shapes && current.texts === next.texts) return;
 
-    // 1. Calculate new state
-    const currentPoints = currentWorkspace.points;
-    const newPoints = typeof action === 'function' ? (action as Function)(currentPoints) : action;
-
-    // If no change, do nothing
-    if (currentPoints === newPoints) return;
-
-    // 2. Save snapshot of OLD state
-    saveSnapshot(targetId, currentPoints, currentWorkspace.shapes, currentWorkspace.texts);
-
-    // 3. Update state
-    setWorkspaces(prev => prev.map(ws => {
-      if (ws.id !== targetId) return ws;
-      return { ...ws, points: newPoints };
-    }));
-
-    emitLocalChange(
-      targetId,
-      { points: currentPoints, shapes: currentWorkspace.shapes, texts: currentWorkspace.texts },
-      { points: newPoints, shapes: currentWorkspace.shapes, texts: currentWorkspace.texts }
-    );
+    saveSnapshot(targetId, current.points, current.shapes, current.texts);
+    setWorkspaces(prev => prev.map(ws => ws.id === targetId ? { ...ws, ...next } : ws));
+    emitLocalChange(targetId, current, next);
   }, [activeWorkspace, saveSnapshot, emitLocalChange]);
+
+  const updatePoints = useCallback((action: React.SetStateAction<Record<string, Point>>) => {
+    updateBoard(current => ({ ...current, points: resolveStateAction(action, current.points) }));
+  }, [updateBoard]);
 
   const updateShapes = useCallback((action: React.SetStateAction<GeometricShape[]>) => {
-    const targetId = activeWorkspace.id;
-    const currentWorkspace = workspacesRef.current.find(ws => ws.id === targetId) || activeWorkspace;
-
-    // 1. Calculate new state
-    const currentShapes = currentWorkspace.shapes;
-    const newShapes = typeof action === 'function' ? (action as Function)(currentShapes) : action;
-
-    if (currentShapes === newShapes) return;
-
-    // 2. Save snapshot of OLD state
-    saveSnapshot(targetId, currentWorkspace.points, currentShapes, currentWorkspace.texts);
-
-    // 3. Update state
-    setWorkspaces(prev => prev.map(ws => {
-      if (ws.id !== targetId) return ws;
-      return { ...ws, shapes: newShapes };
-    }));
-
-    emitLocalChange(
-      targetId,
-      { points: currentWorkspace.points, shapes: currentShapes, texts: currentWorkspace.texts },
-      { points: currentWorkspace.points, shapes: newShapes, texts: currentWorkspace.texts }
-    );
-  }, [activeWorkspace, saveSnapshot, emitLocalChange]);
+    updateBoard(current => ({ ...current, shapes: resolveStateAction(action, current.shapes) }));
+  }, [updateBoard]);
 
   const updateTexts = useCallback((action: React.SetStateAction<Record<string, TextLabel>>) => {
-    const targetId = activeWorkspace.id;
-    const currentWorkspace = workspacesRef.current.find(ws => ws.id === targetId) || activeWorkspace;
-
-    const currentTexts = currentWorkspace.texts || {};
-    const newTexts = typeof action === 'function' ? (action as Function)(currentTexts) : action;
-
-    if (currentTexts === newTexts) return;
-
-    saveSnapshot(targetId, currentWorkspace.points, currentWorkspace.shapes, currentTexts);
-
-    setWorkspaces(prev => prev.map(ws => {
-      if (ws.id !== targetId) return ws;
-      return { ...ws, texts: newTexts };
-    }));
-
-    emitLocalChange(
-      targetId,
-      { points: currentWorkspace.points, shapes: currentWorkspace.shapes, texts: currentTexts },
-      { points: currentWorkspace.points, shapes: currentWorkspace.shapes, texts: newTexts }
-    );
-  }, [activeWorkspace, saveSnapshot, emitLocalChange]);
+    updateBoard(current => ({ ...current, texts: resolveStateAction(action, current.texts) }));
+  }, [updateBoard]);
 
 
   const clearActiveWorkspace = useCallback(() => {
@@ -409,6 +364,7 @@ export const useWorkspaces = () => {
     updatePoints,
     updateShapes,
     updateTexts,
+    updateBoard,
     setLocalOpsHandler,
     setWorkspaceRoom,
     joinRoom,

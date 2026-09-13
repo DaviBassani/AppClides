@@ -1,8 +1,19 @@
 import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
-import { applyBoardOps, BoardState, CollabOps, isEmptyOps, mergeOps } from './collabProtocol';
+import {
+  applyBoardOps,
+  BoardState,
+  CollabOps,
+  isEmptyOps,
+  isSafeId,
+  mergeOps,
+  parseBoardState,
+  parseCollabOps,
+  sanitizePeer,
+  splitCollabOps
+} from './collabProtocol';
 
-const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = (import.meta as any).env.VITE_SUPABASE_ANON_KEY as string;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export type CollabStatus = 'connecting' | 'online' | 'reconnecting' | 'offline';
 
@@ -28,6 +39,22 @@ interface Envelope<T> {
   payload: T;
 }
 
+const ROOM_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
+
+export const isSafeRoomId = (value: unknown): value is string =>
+  typeof value === 'string' && ROOM_ID_PATTERN.test(value);
+
+const parseEnvelope = (value: unknown): Envelope<unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const envelope = value as Record<string, unknown>;
+  if (!isSafeId(envelope.senderId) || !isSafeId(envelope.messageId) || !('payload' in envelope)) return null;
+  return {
+    senderId: envelope.senderId,
+    messageId: envelope.messageId,
+    payload: envelope.payload
+  };
+};
+
 interface CollabSessionOptions {
   requestInitialState?: boolean;
 }
@@ -43,29 +70,44 @@ const PEER_ID_KEY = 'euclides_collab_peer_id_v1';
 const PROFILE_KEY = 'euclides_collab_profile_v1';
 
 const getPeerIdentity = () => {
-  let legacy: { id?: string; name?: string; color?: string } | null = null;
+  let legacy: Record<string, unknown> | null = null;
   try {
     const stored = sessionStorage.getItem(LEGACY_IDENTITY_KEY);
-    if (stored) legacy = JSON.parse(stored);
+    const parsed = stored ? JSON.parse(stored) : null;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) legacy = parsed;
   } catch {
     // sessionStorage may be unavailable in hardened browser profiles.
   }
 
-  let id = legacy?.id || crypto.randomUUID();
+  let id = isSafeId(legacy?.id) ? legacy.id : crypto.randomUUID();
   try {
-    id = sessionStorage.getItem(PEER_ID_KEY) || id;
+    const storedId = sessionStorage.getItem(PEER_ID_KEY);
+    if (isSafeId(storedId)) id = storedId;
     sessionStorage.setItem(PEER_ID_KEY, id);
   } catch {
     // Collaboration still works with an ephemeral ID.
   }
 
-  let profile = {
-    name: legacy?.name || PEER_NAMES[Math.floor(Math.random() * PEER_NAMES.length)],
-    color: legacy?.color || PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)]
+  let profile: { name: string; color: string } = {
+    name: typeof legacy?.name === 'string' ? legacy.name : PEER_NAMES[Math.floor(Math.random() * PEER_NAMES.length)],
+    color: typeof legacy?.color === 'string' ? legacy.color : PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)]
   };
+  const fallbackProfile = sanitizePeer({ id, ...profile });
+  profile = fallbackProfile
+    ? { name: fallbackProfile.name, color: fallbackProfile.color }
+    : {
+        name: PEER_NAMES[Math.floor(Math.random() * PEER_NAMES.length)],
+        color: PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)]
+      };
   try {
     const stored = localStorage.getItem(PROFILE_KEY);
-    if (stored) profile = { ...profile, ...JSON.parse(stored) };
+    const parsed = stored ? JSON.parse(stored) : null;
+    const candidate = sanitizePeer({
+      id,
+      name: parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>).name : profile.name,
+      color: parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>).color : profile.color
+    });
+    if (candidate) profile = { name: candidate.name, color: candidate.color };
     localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
   } catch {
     // Collaboration still works without profile persistence.
@@ -94,11 +136,13 @@ const getClient = () => {
 
 export const getRoomFromUrl = (): string | null => {
   if (typeof window === 'undefined') return null;
-  return new URLSearchParams(window.location.search).get('room');
+  const room = new URLSearchParams(window.location.search).get('room');
+  return isSafeRoomId(room) ? room : null;
 };
 
 export const setRoomInUrl = (room: string | null) => {
   if (typeof window === 'undefined') return;
+  if (room !== null && !isSafeRoomId(room)) throw new Error('Invalid collaboration room ID');
   const url = new URL(window.location.href);
   if (room) url.searchParams.set('room', room);
   else url.searchParams.delete('room');
@@ -134,6 +178,7 @@ export class CollabSession {
   private requestInitialState: boolean;
 
   constructor(roomId: string, events: CollabEvents, client?: SupabaseClient, options: CollabSessionOptions = {}) {
+    if (!isSafeRoomId(roomId)) throw new Error('Invalid collaboration room ID');
     this.roomId = roomId;
     this.events = events;
     const identity = getPeerIdentity();
@@ -163,34 +208,40 @@ export class CollabSession {
 
     channel
       .on('broadcast', { event: 'ops' }, ({ payload }) => {
-        const envelope = payload as Envelope<CollabOps>;
-        if (!this.acceptEnvelope(envelope)) return;
-        this.events.onRemoteOps(envelope.payload);
+        const envelope = parseEnvelope(payload);
+        const ops = envelope ? parseCollabOps(envelope.payload) : null;
+        if (!envelope || !ops || !this.acceptEnvelope(envelope)) return;
+        this.events.onRemoteOps(ops);
       })
       .on('broadcast', { event: 'cursor' }, ({ payload }) => {
-        const envelope = payload as Envelope<PeerPresence>;
-        if (!this.acceptEnvelope(envelope)) return;
-        this.events.onRemotePeer(envelope.payload);
+        const envelope = parseEnvelope(payload);
+        const peer = envelope ? sanitizePeer(envelope.payload) : null;
+        if (!envelope || !peer || peer.id !== envelope.senderId || !this.acceptEnvelope(envelope)) return;
+        this.events.onRemotePeer(peer);
       })
       .on('broadcast', { event: 'profile' }, ({ payload }) => {
-        const envelope = payload as Envelope<PeerPresence>;
-        if (!this.acceptEnvelope(envelope)) return;
-        this.events.onRemotePeer(envelope.payload);
+        const envelope = parseEnvelope(payload);
+        const peer = envelope ? sanitizePeer(envelope.payload) : null;
+        if (!envelope || !peer || peer.id !== envelope.senderId || !this.acceptEnvelope(envelope)) return;
+        this.events.onRemotePeer(peer);
       })
       .on('broadcast', { event: 'request-state' }, ({ payload }) => {
-        const envelope = payload as Envelope<{ requestId: string }>;
-        if (!this.acceptEnvelope(envelope) || !this.isStateLeader(envelope.senderId)) return;
-        this.events.onRequestFullState(envelope.payload.requestId);
+        const envelope = parseEnvelope(payload);
+        const request = envelope?.payload as Record<string, unknown> | undefined;
+        if (!envelope || !request || !isSafeId(request.requestId) || !this.acceptEnvelope(envelope) || !this.isStateLeader(envelope.senderId)) return;
+        this.events.onRequestFullState(request.requestId);
       })
       .on('broadcast', { event: 'full-state' }, ({ payload }) => {
-        const envelope = payload as Envelope<{ requestId: string; state: BoardState }>;
-        if (!this.acceptEnvelope(envelope) || envelope.payload.requestId !== this.pendingStateRequestId) return;
+        const envelope = parseEnvelope(payload);
+        const response = envelope?.payload as Record<string, unknown> | undefined;
+        const state = response ? parseBoardState(response.state) : null;
+        if (!envelope || !response || !isSafeId(response.requestId) || !state || !this.acceptEnvelope(envelope) || response.requestId !== this.pendingStateRequestId) return;
         if (this.stateRequestTimer !== null) globalThis.clearTimeout(this.stateRequestTimer);
         this.stateRequestTimer = null;
         this.pendingStateRequestId = null;
         const localOverlay = this.pendingSyncOps;
         this.pendingSyncOps = {};
-        this.events.onRemoteFullState(applyBoardOps(envelope.payload.state, localOverlay));
+        this.events.onRemoteFullState(applyBoardOps(state, localOverlay));
         // Idempotent upserts/deletes make this safe if an earlier delivery succeeded.
         if (!isEmptyOps(localOverlay)) this.sendOps(localOverlay);
       })
@@ -245,13 +296,14 @@ export class CollabSession {
   }
 
   sendFullState(state: BoardState, requestId: string) {
-    this.sendEnvelope('full-state', { requestId, state });
+    const validated = parseBoardState(state);
+    if (validated) this.sendEnvelope('full-state', { requestId, state: validated });
   }
 
   async updateName(value: string) {
-    const name = value.trim().slice(0, 32);
-    if (!name || name === this.peerName) return this.info;
-    this.peerName = name;
+    const profile = sanitizePeer({ id: this.peerId, name: value, color: this.peerColor });
+    if (!profile || profile.name === this.peerName) return this.info;
+    this.peerName = profile.name;
     savePeerProfile(this.peerName, this.peerColor);
 
     if (this.channel && this.status === 'online') {
@@ -318,7 +370,7 @@ export class CollabSession {
     if (this.status !== 'online' || isEmptyOps(this.pendingOps)) return;
     const ops = this.pendingOps;
     this.pendingOps = {};
-    this.sendEnvelope('ops', ops);
+    splitCollabOps(ops).forEach(chunk => this.sendEnvelope('ops', chunk));
   }
 
   private flushCursor() {
@@ -359,7 +411,8 @@ export class CollabSession {
     const state = channel.presenceState<PeerPresence & { presence_ref?: string; phx_ref?: string }>();
     const peersById = new Map<string, PeerPresence>();
     Object.values(state).flat().forEach(peer => {
-      if (peer?.id) peersById.set(peer.id, { id: peer.id, name: peer.name, color: peer.color });
+      const sanitized = sanitizePeer(peer);
+      if (sanitized) peersById.set(sanitized.id, sanitized);
     });
     this.peerIds = new Set(peersById.keys());
     this.events.onPeersChanged(Array.from(peersById.values()));

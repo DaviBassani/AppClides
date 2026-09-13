@@ -4,22 +4,20 @@ import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { Workspace, Point, GeometricShape, TextLabel } from '../types';
+import { BoardState, Workspace } from '../types';
 import { useChat } from '../hooks/useChat';
 import { Language, t } from '../utils/i18n';
 
 interface ChatProps {
   activeWorkspace: Workspace;
-  setPoints: React.Dispatch<React.SetStateAction<Record<string, Point>>>;
-  setShapes: React.Dispatch<React.SetStateAction<GeometricShape[]>>;
-  setTexts?: React.Dispatch<React.SetStateAction<Record<string, TextLabel>>>;
+  updateBoard: React.Dispatch<React.SetStateAction<BoardState>>;
   isOpen: boolean;
   onClose: () => void;
   lang: Language;
 }
 
-const Chat: React.FC<ChatProps> = ({ activeWorkspace, setPoints, setShapes, setTexts, isOpen, onClose, lang }) => {
-  const { messages, isLoading, sendMessage } = useChat({ activeWorkspace, setPoints, setShapes, setTexts, lang });
+const Chat: React.FC<ChatProps> = ({ activeWorkspace, updateBoard, isOpen, onClose, lang }) => {
+  const { messages, isLoading, sendMessage } = useChat({ activeWorkspace, updateBoard, lang });
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 

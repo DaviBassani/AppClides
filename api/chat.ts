@@ -1,28 +1,107 @@
 import { GoogleGenAI, FunctionDeclaration, Type, Tool } from "@google/genai";
+import { MAX_CHAT_BODY_BYTES, parseChatRequest } from './chatValidation';
+import type { ShapeType } from '../types';
 
 export const config = {
   runtime: 'edge',
 };
 
+const RATE_LIMIT = 10;
+const RATE_WINDOW_MS = 60_000;
+const MAX_RATE_LIMIT_ENTRIES = 1_000;
+const rateLimits = new Map<string, { count: number; resetAt: number }>();
+
+export const resetRateLimitsForTests = () => rateLimits.clear();
+
+const jsonResponse = (body: unknown, status: number, extraHeaders: Record<string, string> = {}) =>
+    new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...extraHeaders }
+    });
+
+const getClientIp = (request: Request) =>
+    request.headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('cf-connecting-ip')?.trim() ||
+    null;
+
+const isRateLimited = (ip: string | null) => {
+    if (!ip) return false;
+    const now = Date.now();
+    const current = rateLimits.get(ip);
+    if (!current || current.resetAt <= now) {
+        if (rateLimits.size >= MAX_RATE_LIMIT_ENTRIES) {
+            for (const [key, value] of rateLimits) {
+                if (value.resetAt <= now) rateLimits.delete(key);
+            }
+            if (rateLimits.size >= MAX_RATE_LIMIT_ENTRIES) rateLimits.delete(rateLimits.keys().next().value as string);
+        }
+        rateLimits.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
+        return false;
+    }
+    current.count++;
+    return current.count > RATE_LIMIT;
+};
+
+const readBoundedBody = async (request: Request): Promise<string | null> => {
+    if (!request.body) return '';
+    const reader = request.body.getReader();
+    const decoder = new TextDecoder();
+    let totalBytes = 0;
+    let result = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.byteLength;
+        if (totalBytes > MAX_CHAT_BODY_BYTES) {
+            await reader.cancel();
+            return null;
+        }
+        result += decoder.decode(value, { stream: true });
+    }
+    return result + decoder.decode();
+};
+
 export default async function handler(request: Request) {
     if (request.method !== 'POST') {
-        return new Response('Method Not Allowed', { status: 405 });
+        return jsonResponse({ error: 'Method Not Allowed' }, 405, { Allow: 'POST' });
     }
 
-    const apiKey = process.env.API_KEY;
+    const requestOrigin = request.headers.get('origin');
+    if (requestOrigin && requestOrigin !== new URL(request.url).origin) {
+        return jsonResponse({ error: 'Forbidden' }, 403);
+    }
+
+    if (isRateLimited(getClientIp(request))) {
+        return jsonResponse({ error: 'Too Many Requests' }, 429, { 'Retry-After': '60' });
+    }
+
+    const contentLength = Number(request.headers.get('content-length') || 0);
+    if (contentLength > MAX_CHAT_BODY_BYTES) {
+        return jsonResponse({ error: 'Payload Too Large' }, 413);
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
 
     if (!apiKey) {
-        console.error("[API] Error: API_KEY is missing");
-        return new Response(JSON.stringify({ 
-            error: "Server Configuration Error: API_KEY is missing." 
-        }), { 
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        console.error("[API] Error: GEMINI_API_KEY is missing");
+        return jsonResponse({ error: 'Server Configuration Error' }, 500);
     }
 
     try {
-        const body = await request.json();
+        const rawBody = await readBoundedBody(request);
+        if (rawBody === null) {
+            return jsonResponse({ error: 'Payload Too Large' }, 413);
+        }
+        let parsedBody: unknown;
+        try {
+            parsedBody = JSON.parse(rawBody);
+        } catch {
+            return jsonResponse({ error: 'Invalid JSON' }, 400);
+        }
+        const body = parseChatRequest(parsedBody);
+        if (!body) return jsonResponse({ error: 'Invalid Request' }, 400);
         const { prompt, points, shapes, texts, lang, messages } = body;
 
         // Detect mode from prompt
@@ -366,9 +445,10 @@ export default async function handler(request: Request) {
             const shapesList = (shapes || []).map(s => {
                 const p1Label = points?.[s.p1]?.label || s.p1;
                 const p2Label = points?.[s.p2]?.label || s.p2;
-                const typeMap = {
+                const typeMap: Record<ShapeType, string> = {
                     'segment': 'Segment',
                     'line': 'Line',
+                    'ray': 'Ray',
                     'circle': 'Circle'
                 };
                 return `  • ${typeMap[s.type] || s.type}: ${p1Label} to ${p2Label}`;
@@ -399,8 +479,8 @@ User Language: ${lang === 'pt' ? 'Portuguese (respond in Portuguese)' : 'English
         const conversationHistory = [];
 
         // Add previous messages from history
-        if (messages && Array.isArray(messages)) {
-            messages.forEach((msg: any) => {
+        if (messages.length > 0) {
+            messages.forEach((msg) => {
                 if (msg.role === 'user') {
                     conversationHistory.push({
                         role: 'user',
@@ -437,19 +517,10 @@ User Language: ${lang === 'pt' ? 'Portuguese (respond in Portuguese)' : 'English
             ?.filter(p => p.functionCall)
             ?.map(p => p.functionCall);
 
-        return new Response(JSON.stringify({ text, functionCalls }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ text, functionCalls }, 200);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("[API] Error:", error);
-        return new Response(JSON.stringify({ 
-            error: "Internal Server Error", 
-            details: error.message 
-        }), { 
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ error: 'Internal Server Error' }, 500);
     }
 }

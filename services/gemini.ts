@@ -3,8 +3,13 @@ import { Language } from "../utils/i18n";
 
 export interface GeminiResponse {
     text: string;
-    functionCalls?: any[];
+    functionCalls?: GeminiFunctionCall[];
     errorDetails?: string;
+}
+
+export interface GeminiFunctionCall {
+    name: string;
+    args: Record<string, unknown>;
 }
 
 export interface ChatMessage {
@@ -40,13 +45,24 @@ export const askEuclides = async (
             throw new Error(errorData.details || `Server error: ${response.status}`);
         }
 
-        const data = await response.json();
+        const data: unknown = await response.json();
+        const record = data && typeof data === 'object' && !Array.isArray(data)
+            ? data as Record<string, unknown>
+            : {};
+        const functionCalls = Array.isArray(record.functionCalls)
+            ? record.functionCalls.flatMap(call => {
+                if (!call || typeof call !== 'object' || Array.isArray(call)) return [];
+                const candidate = call as Record<string, unknown>;
+                if (typeof candidate.name !== 'string' || !candidate.args || typeof candidate.args !== 'object' || Array.isArray(candidate.args)) return [];
+                return [{ name: candidate.name, args: candidate.args as Record<string, unknown> }];
+            })
+            : undefined;
         return {
-            text: data.text,
-            functionCalls: data.functionCalls
+            text: typeof record.text === 'string' ? record.text : '',
+            functionCalls
         };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("API Call Error:", error);
         
         const errorMessage = lang === 'pt' 
@@ -55,7 +71,7 @@ export const askEuclides = async (
 
         return { 
             text: errorMessage, 
-            errorDetails: error.message 
+            errorDetails: import.meta.env.DEV && error instanceof Error ? error.message : undefined
         };
     }
 };
