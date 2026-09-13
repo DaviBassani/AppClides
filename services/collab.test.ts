@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CollabSession, isSafeRoomId, type CollabEvents } from './collab';
+import { CollabSession, hasCollabConfig, isSafeRoomId, type CollabEvents } from './collab';
 
 class FakeChannel {
   sent: Array<{ type: string; event: string; payload: unknown }> = [];
@@ -239,5 +239,14 @@ describe('collaboration room IDs', () => {
     expect(isSafeRoomId('../secret')).toBe(false);
     expect(isSafeRoomId('<script>alert(1)</script>')).toBe(false);
     expect(isSafeRoomId('a'.repeat(129))).toBe(false);
+  });
+});
+
+describe('collaboration configuration', () => {
+  it('requires both non-empty Supabase values', () => {
+    expect(hasCollabConfig('https://project.supabase.co', 'anon-key')).toBe(true);
+    expect(hasCollabConfig('', 'anon-key')).toBe(false);
+    expect(hasCollabConfig('https://project.supabase.co', '  ')).toBe(false);
+    expect(hasCollabConfig(undefined, undefined)).toBe(false);
   });
 });

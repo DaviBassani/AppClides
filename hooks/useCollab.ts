@@ -4,6 +4,7 @@ import {
   CollabStatus,
   PeerPresence,
   getRoomFromUrl,
+  isCollabConfigured,
   setRoomInUrl
 } from '../services/collab';
 import { BoardState, CollabOps } from '../services/collabProtocol';
@@ -31,10 +32,11 @@ export const useCollab = ({
   applyRemoteStateToRoom,
   lang
 }: UseCollabProps) => {
+  const isAvailable = isCollabConfigured();
   const [pendingInitialRoom, setPendingInitialRoom] = useState<string | null>(() => getRoomFromUrl());
   const [peers, setPeers] = useState<PeerPresence[]>([]);
   const [localPeer, setLocalPeer] = useState<PeerPresence | null>(null);
-  const [status, setStatus] = useState<CollabStatus>('offline');
+  const [status, setStatus] = useState<CollabStatus>(isAvailable ? 'offline' : 'unavailable');
   const sessionRef = useRef<CollabSession | null>(null);
   const newRoomsRef = useRef(new Set<string>());
   const initialRoomIsBound = !!pendingInitialRoom && workspaces.some(ws => ws.roomId === pendingInitialRoom);
@@ -84,13 +86,24 @@ export const useCollab = ({
       void sessionRef.current?.disconnect();
       sessionRef.current = null;
       setPeers([]);
-      setStatus('offline');
+      setStatus(isAvailable ? 'offline' : 'unavailable');
+      return;
+    }
+
+    if (!isAvailable) {
+      void sessionRef.current?.disconnect();
+      sessionRef.current = null;
+      setPeers([]);
+      setLocalPeer(null);
+      setStatus('unavailable');
       return;
     }
 
     let disposed = false;
     const isNewRoom = newRoomsRef.current.has(roomId);
-    const session = new CollabSession(roomId, {
+    let session: CollabSession;
+    try {
+      session = new CollabSession(roomId, {
       onRemoteOps: ops => {
         if (!disposed) actionsRef.current.applyRemoteOpsToRoom(roomId, ops);
       },
@@ -126,7 +139,13 @@ export const useCollab = ({
       onStatusChanged: nextStatus => {
         if (!disposed) setStatus(nextStatus);
       }
-    }, undefined, { requestInitialState: !isNewRoom });
+      }, undefined, { requestInitialState: !isNewRoom });
+    } catch {
+      setPeers([]);
+      setLocalPeer(null);
+      setStatus('unavailable');
+      return;
+    }
 
     sessionRef.current = session;
     setLocalPeer(session.info);
@@ -146,18 +165,22 @@ export const useCollab = ({
       if (sessionRef.current === session) sessionRef.current = null;
       void session.disconnect();
     };
-  }, [roomId]);
+  }, [roomId, isAvailable]);
 
   const updateCursor = useCallback((cursor: { x: number; y: number } | null) => {
     sessionRef.current?.sendCursor(cursor);
   }, []);
 
   const startSharing = useCallback(() => {
+    if (!isAvailable) {
+      setStatus('unavailable');
+      return;
+    }
     const room = crypto.randomUUID();
     newRoomsRef.current.add(room);
     setWorkspaceRoom(activeWorkspace.id, room);
     setRoomInUrl(room);
-  }, [activeWorkspace.id, setWorkspaceRoom]);
+  }, [activeWorkspace.id, isAvailable, setWorkspaceRoom]);
 
   const stopSharing = useCallback(() => {
     setWorkspaceRoom(activeWorkspace.id, null);
