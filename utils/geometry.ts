@@ -1,7 +1,7 @@
 import { Point, GeometricShape, TextLabel } from '../types';
 import { SNAP_DISTANCE } from '../constants';
 
-export const generateId = () => Math.random().toString(36).substr(2, 9);
+export const generateId = () => crypto.randomUUID();
 
 export const distance = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
   return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
@@ -49,52 +49,125 @@ export const findNearestText = (
 
   return nearestId;
 };
+export interface ViewportBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
 
-// Calculate slope for extending lines to infinity (visual only)
-export const getLineEnds = (p1: { x: number; y: number }, p2: { x: number; y: number }, width: number, height: number) => {
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
+export interface LineSegment {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
 
-  if (Math.abs(dx) < 0.001) {
-    // Vertical line
-    return { x1: p1.x, y1: -10000, x2: p1.x, y2: 10000 };
-  }
-
-  const m = dy / dx;
-  const b = p1.y - m * p1.x;
-
-  const x1 = -10000;
-  const y1 = m * x1 + b;
-  const x2 = 10000;
-  const y2 = m * x2 + b;
-
-  return { x1, y1, x2, y2 };
+// Visible rectangle in world coordinates, with margin (in world units)
+export const getViewportBounds = (
+  view: { x: number; y: number; k: number },
+  widthPx: number,
+  heightPx: number,
+  marginPx: number = 200
+): ViewportBounds => {
+  const margin = marginPx / view.k;
+  return {
+    minX: (-view.x - margin) / view.k,
+    minY: (-view.y - margin) / view.k,
+    maxX: (widthPx - view.x + margin) / view.k,
+    maxY: (heightPx - view.y + margin) / view.k,
+  };
 };
 
-// Get ray endpoints (start at p1, extend infinitely through p2)
-export const getRayEnd = (p1: { x: number; y: number }, p2: { x: number; y: number }) => {
+// Liang-Barsky parametric clipping of the infinite line through a→b against bounds
+export const clipLine = (
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  bounds: ViewportBounds
+): LineSegment | null => {
   const dx = p2.x - p1.x;
   const dy = p2.y - p1.y;
 
-  if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
-    // Points are the same, extend arbitrarily to the right
-    return { x1: p1.x, y1: p1.y, x2: 10000, y2: p1.y };
+  if (Math.abs(dx) < 1e-12 && Math.abs(dy) < 1e-12) {
+    // Degenerate: coincident points, render a dot-like segment at p1 if visible
+    if (p1.x >= bounds.minX && p1.x <= bounds.maxX && p1.y >= bounds.minY && p1.y <= bounds.maxY) {
+      return { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+    }
+    return null;
   }
 
-  if (Math.abs(dx) < 0.001) {
-    // Vertical ray
-    const direction = dy > 0 ? 1 : -1;
-    return { x1: p1.x, y1: p1.y, x2: p1.x, y2: p1.y + direction * 20000 };
+  let t0 = -Infinity;
+  let t1 = Infinity;
+
+  // Liang-Barsky slab test: intersect parameter range [t0,t1] with [ta,tb]
+  const clipSlab = (p: number, d: number, min: number, max: number): boolean => {
+    if (Math.abs(d) < 1e-12) {
+      return p >= min && p <= max;
+    }
+    let ta = (min - p) / d;
+    let tb = (max - p) / d;
+    if (ta > tb) [ta, tb] = [tb, ta];
+    t0 = Math.max(t0, ta);
+    t1 = Math.min(t1, tb);
+    return t0 <= t1;
+  };
+
+  if (!clipSlab(p1.x, dx, bounds.minX, bounds.maxX)) return null;
+  if (!clipSlab(p1.y, dy, bounds.minY, bounds.maxY)) return null;
+
+  if (t1 <= t0) return null;
+
+  return {
+    x1: p1.x + t0 * dx,
+    y1: p1.y + t0 * dy,
+    x2: p1.x + t1 * dx,
+    y2: p1.y + t1 * dy,
+  };
+};
+
+// Clip the ray starting at p1 through p2 (extends only in direction p1→p2)
+export const clipRay = (
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  bounds: ViewportBounds
+): LineSegment | null => {
+  // Clip the infinite line to bounds, then restrict the parameter to [0, +Inf)
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+
+  if (Math.abs(dx) < 1e-12 && Math.abs(dy) < 1e-12) {
+    if (p1.x >= bounds.minX && p1.x <= bounds.maxX && p1.y >= bounds.minY && p1.y <= bounds.maxY) {
+      return { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+    }
+    return null;
   }
 
-  // Calculate slope and extend in the direction of p2
-  const m = dy / dx;
-  const direction = dx > 0 ? 1 : -1;
+  let t0 = 0; // ray starts at p1
+  let t1 = Infinity;
 
-  const x2 = p1.x + direction * 20000;
-  const y2 = p1.y + m * (x2 - p1.x);
+  const clipSlab = (p: number, d: number, min: number, max: number): boolean => {
+    if (Math.abs(d) < 1e-12) {
+      return p >= min && p <= max;
+    }
+    let ta = (min - p) / d;
+    let tb = (max - p) / d;
+    if (ta > tb) [ta, tb] = [tb, ta];
+    t0 = Math.max(t0, ta);
+    t1 = Math.min(t1, tb);
+    return t0 <= t1;
+  };
 
-  return { x1: p1.x, y1: p1.y, x2, y2 };
+  if (!clipSlab(p1.x, dx, bounds.minX, bounds.maxX)) return null;
+  if (!clipSlab(p1.y, dy, bounds.minY, bounds.maxY)) return null;
+
+  if (t1 <= t0) return null;
+
+  return {
+    x1: p1.x + t0 * dx,
+    y1: p1.y + t0 * dy,
+    x2: p1.x + t1 * dx,
+    y2: p1.y + t1 * dy,
+  };
 };
 
 // --- Projection Logic (Snap to Shape) ---

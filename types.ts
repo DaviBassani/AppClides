@@ -35,17 +35,15 @@ export interface GeometricShape {
   color?: string;
 }
 
-export interface Workspace {
-  id: string;
-  name: string;
+export interface BoardState {
   points: Record<string, Point>;
   shapes: GeometricShape[];
   texts: Record<string, TextLabel>;
-  createdAt: number;
 }
 
-export interface AppState {
-  workspaces: Workspace[];
-  activeWorkspaceId: string;
-  selectedTool: ToolType;
+export interface Workspace extends BoardState {
+  id: string;
+  name: string;
+  createdAt: number;
+  roomId?: string;
 }

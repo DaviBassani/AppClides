@@ -1,0 +1,1 @@
+export const MAX_CHAT_HISTORY_MESSAGES = 20;

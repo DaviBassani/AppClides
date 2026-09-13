@@ -74,7 +74,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
   };
 
   return (
-    <div className="absolute z-20 left-1/2 -translate-x-1/2 w-full max-w-[95vw] md:w-auto bottom-safe md:top-4 md:bottom-auto transition-all duration-300">
+    <div className="absolute z-20 left-1/2 -translate-x-1/2 w-full max-w-[95vw] md:w-auto bottom-[max(1rem,env(safe-area-inset-bottom))] md:top-4 md:bottom-auto transition-all duration-300">
       <div className="relative group rounded-2xl shadow-xl border border-slate-200 bg-white/95 backdrop-blur-md">
         
         {/* Left Fade Indicator */}
@@ -138,9 +138,17 @@ const Toolbar: React.FC<ToolbarProps> = ({
                       ? "bg-blue-600 text-white shadow-md"
                       : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                   )}
-                  title={label}
+                  title={`${label} (${tool.shortcut})`}
                 >
                   <Icon size={24} strokeWidth={isSelected ? 2.5 : 2} />
+                  <span
+                    className={clsx(
+                      "absolute top-1.5 right-2 text-[9px] font-semibold leading-none hidden md:block",
+                      isSelected ? "text-blue-200" : "text-slate-300 group-hover:text-slate-400"
+                    )}
+                  >
+                    {tool.shortcut}
+                  </span>
                 </button>
               );
             })}

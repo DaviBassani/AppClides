@@ -1,14 +1,17 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { ToolType, Point, GeometricShape, TextLabel } from '../types';
+import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { ToolType, Point, GeometricShape, TextLabel, BoardState, ShapeType } from '../types';
 import clsx from 'clsx';
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction';
 import Grid from './canvas/Grid';
 import { ShapeRenderer, GhostShapeRenderer } from './canvas/ShapeRenderer';
 import PointRenderer from './canvas/PointRenderer';
 import TextRenderer from './canvas/TextRenderer';
+import LiveCursors from './canvas/LiveCursors';
 import StyleMenu from './StyleMenu';
 import Loupe from './canvas/Loupe';
 import { Language, t } from '../utils/i18n';
+import { getViewportBounds, ViewportBounds } from '../utils/geometry';
+import { PeerPresence } from '../services/collab';
 
 interface CanvasProps {
   tool: ToolType;
@@ -18,6 +21,7 @@ interface CanvasProps {
   setPoints: React.Dispatch<React.SetStateAction<Record<string, Point>>>;
   setShapes: React.Dispatch<React.SetStateAction<GeometricShape[]>>;
   setTexts: React.Dispatch<React.SetStateAction<Record<string, TextLabel>>>;
+  updateBoard: React.Dispatch<React.SetStateAction<BoardState>>;
   view: { x: number; y: number; k: number };
   setView: React.Dispatch<React.SetStateAction<{ x: number; y: number; k: number }>>;
   showGrid: boolean;
@@ -25,56 +29,73 @@ interface CanvasProps {
   lang: Language;
   selectedIds: string[];
   setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
+  peers?: PeerPresence[];
+  onCursorMove?: (cursor: { x: number; y: number } | null) => void;
 }
 
-const Canvas: React.FC<CanvasProps> = ({ 
-  tool, 
-  points, 
+const Canvas: React.FC<CanvasProps> = ({
+  tool,
+  points,
   shapes,
-  texts, 
-  setPoints, 
+  texts,
+  setPoints,
   setShapes,
   setTexts,
+  updateBoard,
   view,
   setView,
-  showGrid, 
+  showGrid,
   snapToGrid,
   lang,
   selectedIds,
-  setSelectedIds
+  setSelectedIds,
+  peers = [],
+  onCursorMove
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   
   const {
     handleMouseDown, handleMouseMove, handleMouseUp,
     handleTouchStart, handleTouchMove, handleTouchEnd,
     handleWheel,
-    cursor, draftStartId, draggingId, hoveredId, hoveredIntersection, isPanning,
-    touchPos, 
+    cursor, draftStartId, draggingId, hoveredId, hoveredIntersection, isPanning, isEraseHover,
+    touchPos,
   } = useCanvasInteraction({
     tool, points, shapes, texts, setPoints, setShapes, setTexts, view, setView, snapToGrid, containerRef,
     externalSelection: { selectedIds, setSelectedIds, editingTextId, setEditingTextId }
   });
 
+  const cursorClass = isPanning
+    ? "cursor-grabbing"
+    : tool === ToolType.SELECT
+      ? "cursor-default"
+      : tool === ToolType.ERASER
+        ? (isEraseHover ? "cursor-pointer" : "cursor-crosshair")
+        : "cursor-crosshair";
+
   const handleUpdateColor = (color: string) => {
-      setPoints(prev => {
-          const next = { ...prev };
-          Object.keys(next).forEach(id => {
-              if (selectedIds.includes(id)) next[id] = { ...next[id], color };
-          });
-          return next;
-      });
-      setShapes(prev => prev.map(s => selectedIds.includes(s.id) ? { ...s, color } : s));
-      setTexts(prev => {
-          const next = { ...prev };
-          Object.keys(next).forEach(id => {
-              if (selectedIds.includes(id)) next[id] = { ...next[id], color };
-          });
-          return next;
-      });
+      if (selectedIdSet.size === 0) return;
+      updateBoard(current => ({
+        points: Object.fromEntries(Object.entries(current.points).map(([id, point]) => [
+          id,
+          selectedIdSet.has(id) ? { ...point, color } : point
+        ])),
+        shapes: current.shapes.map(shape => selectedIdSet.has(shape.id) ? { ...shape, color } : shape),
+        texts: Object.fromEntries(Object.entries(current.texts).map(([id, text]) => [
+          id,
+          selectedIdSet.has(id) ? { ...text, color } : text
+        ]))
+      }));
   };
+
+  const draftShapeType: ShapeType | null = tool === ToolType.SEGMENT ? 'segment'
+    : tool === ToolType.LINE ? 'line'
+      : tool === ToolType.RAY ? 'ray'
+        : tool === ToolType.CIRCLE ? 'circle'
+          : null;
 
   // Focus textarea when editing starts
   useEffect(() => {
@@ -94,19 +115,52 @@ const Canvas: React.FC<CanvasProps> = ({
   const axisWidth = 1.5 * visualScale;
   const intersectionRadius = 3 * visualScale;
 
+  // Viewport bounds in world coordinates for clipping infinite lines/rays
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const updateSize = () => setContainerSize({ width: el.clientWidth, height: el.clientHeight });
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const viewportBounds: ViewportBounds = useMemo(
+    () => getViewportBounds(view, containerSize.width, containerSize.height),
+    [view, containerSize.width, containerSize.height]
+  );
+
   const instructions = t[lang].canvas.instructions;
+
+  // Broadcast cursor world position to peers (presence throttles further inside CollabSession)
+  const handleCursorBroadcast = useCallback((e: React.MouseEvent) => {
+    if (!onCursorMove) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    onCursorMove({
+      x: (e.clientX - rect.left - view.x) / view.k,
+      y: (e.clientY - rect.top - view.y) / view.k
+    });
+  }, [onCursorMove, view.x, view.y, view.k]);
+
+  const handleMouseLeaveWithCursor = useCallback((e: React.MouseEvent) => {
+    onCursorMove?.(null);
+    handleMouseUp(e);
+  }, [onCursorMove, handleMouseUp]);
 
   return (
     <div 
       ref={containerRef}
       className={clsx(
         "relative w-full h-full overflow-hidden touch-none select-none",
-        isPanning ? "cursor-grabbing" : (tool === ToolType.SELECT ? "cursor-default" : "cursor-crosshair")
+        cursorClass
       )}
       onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
+      onMouseMove={(e) => { handleMouseMove(e); handleCursorBroadcast(e); }}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseLeave={handleMouseLeaveWithCursor}
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -120,7 +174,7 @@ const Canvas: React.FC<CanvasProps> = ({
         
         <g transform={`translate(${view.x}, ${view.y}) scale(${view.k})`}>
             {/* Grid */}
-            <Grid size={20} show={showGrid} axisWidth={axisWidth} visualScale={visualScale} />
+            <Grid size={20} show={showGrid} axisWidth={axisWidth} visualScale={visualScale} viewportBounds={viewportBounds} />
 
             {/* Render Existing Shapes */}
             {shapes.map(shape => {
@@ -128,13 +182,14 @@ const Canvas: React.FC<CanvasProps> = ({
                 const p2 = points[shape.p2];
                 if (!p1 || !p2) return null;
                 return (
-                    <ShapeRenderer 
-                        key={shape.id} 
-                        shape={shape} 
-                        p1={p1} 
-                        p2={p2} 
-                        strokeWidth={strokeWidth} 
-                        isSelected={selectedIds.includes(shape.id)}
+                    <ShapeRenderer
+                        key={shape.id}
+                        shape={shape}
+                        p1={p1}
+                        p2={p2}
+                        strokeWidth={strokeWidth}
+                        isSelected={selectedIdSet.has(shape.id)}
+                        viewportBounds={viewportBounds}
                     />
                 );
             })}
@@ -146,28 +201,29 @@ const Canvas: React.FC<CanvasProps> = ({
                         key={text.id} 
                         text={text} 
                         visualScale={visualScale}
-                        isSelected={selectedIds.includes(text.id)}
+                        isSelected={selectedIdSet.has(text.id)}
                     />
                 )
             ))}
 
             {/* Render Ghost Shape */}
-            {draftStartId && points[draftStartId] && (
-                <GhostShapeRenderer 
-                    type={tool.toLowerCase() as any}
+            {draftShapeType && draftStartId && points[draftStartId] && (
+                <GhostShapeRenderer
+                    type={draftShapeType}
                     p1={points[draftStartId]}
                     cursor={cursor}
                     strokeWidth={strokeWidth}
                     visualScale={visualScale}
+                    viewportBounds={viewportBounds}
                 />
             )}
 
             {/* Render Snap Intersection Marker */}
             {hoveredIntersection && (
-               <circle 
-                  cx={hoveredIntersection.x} 
-                  cy={hoveredIntersection.y} 
-                  r={intersectionRadius} 
+               <circle
+                  cx={hoveredIntersection.x}
+                  cy={hoveredIntersection.y}
+                  r={intersectionRadius}
                   fill="#64748b"
                   opacity={0.7}
                   className="pointer-events-none"
@@ -182,7 +238,7 @@ const Canvas: React.FC<CanvasProps> = ({
                     radius={pointRadius}
                     hoverRadius={pointHoverRadius}
                     isActive={hoveredId === p.id || draftStartId === p.id || draggingId === p.id}
-                    isSelected={selectedIds.includes(p.id)}
+                    isSelected={selectedIdSet.has(p.id)}
                     isDraftStart={draftStartId === p.id}
                     strokeWidth={strokeWidth}
                     visualScale={visualScale}
@@ -190,6 +246,9 @@ const Canvas: React.FC<CanvasProps> = ({
             ))}
         </g>
       </svg>
+
+      {/* Remote peers' cursors stay a constant screen size, Excalidraw-style */}
+      <LiveCursors peers={peers} view={view} />
 
       {/* Text Editing Overlay */}
       {editingTextId && texts[editingTextId] && (
@@ -256,6 +315,7 @@ const Canvas: React.FC<CanvasProps> = ({
          {tool === ToolType.SELECT && instructions.SELECT}
          {tool === ToolType.SEGMENT && instructions.SEGMENT}
          {tool === ToolType.LINE && instructions.LINE}
+         {tool === ToolType.RAY && instructions.RAY}
          {tool === ToolType.CIRCLE && instructions.CIRCLE}
          {tool === ToolType.TEXT && instructions.TEXT}
          

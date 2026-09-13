@@ -13,6 +13,7 @@ export const t = {
       POINT: 'Ponto',
       SEGMENT: 'Segmento',
       LINE: 'Reta',
+      RAY: 'Semi-reta',
       CIRCLE: 'Círculo',
       TEXT: 'Texto',
       ERASER: 'Apagar'
@@ -29,12 +30,13 @@ export const t = {
         SELECT: 'Arraste objetos para mover, ou o fundo para navegar',
         SEGMENT: 'Selecione dois pontos',
         LINE: 'Selecione dois pontos',
+        RAY: 'Selecione origem e direção',
         CIRCLE: 'Selecione centro e raio',
         TEXT: 'Clique para adicionar texto',
         ERASER: 'Clique em objetos para apagar'
       },
       support: 'Apoiar o projeto',
-      version: 'Euclides Web v1.6'
+      version: 'Euclides Web v0.3.0'
     },
     chat: {
       title: 'O Geômetra',
@@ -56,6 +58,22 @@ export const t = {
     tabs: {
       new: 'Nova Demonstração',
       untitled: 'Sem Título'
+    },
+    share: {
+      button: 'Compartilhar',
+      stop: 'Encerrar compartilhamento',
+      copied: 'Link copiado!',
+      online: 'Ao vivo',
+      offline: 'Offline',
+      connecting: 'Conectando...',
+      reconnecting: 'Reconectando...',
+      collaborators: 'colaboradores',
+      beta: 'Beta',
+      editName: 'Editar seu nome',
+      yourName: 'Seu nome na sala',
+      namePlaceholder: 'Como quer aparecer?',
+      profileHint: 'Este nome aparece para todos nesta colaboração.',
+      saveName: 'Salvar nome'
     }
   },
   en: {
@@ -64,6 +82,7 @@ export const t = {
       POINT: 'Point',
       SEGMENT: 'Segment',
       LINE: 'Line',
+      RAY: 'Ray',
       CIRCLE: 'Circle',
       TEXT: 'Text',
       ERASER: 'Erase'
@@ -80,12 +99,13 @@ export const t = {
         SELECT: 'Drag objects to move, or background to pan',
         SEGMENT: 'Select two points',
         LINE: 'Select two points',
+        RAY: 'Select origin and direction',
         CIRCLE: 'Select center and radius',
         TEXT: 'Click to add text',
         ERASER: 'Click objects to delete'
       },
       support: 'Support the project',
-      version: 'Euclides Web v1.6'
+      version: 'Euclides Web v0.3.0'
     },
     chat: {
       title: 'The Geometer',
@@ -107,6 +127,22 @@ export const t = {
     tabs: {
       new: 'New Demonstration',
       untitled: 'Untitled'
+    },
+    share: {
+      button: 'Share',
+      stop: 'Stop sharing',
+      copied: 'Link copied!',
+      online: 'Live',
+      offline: 'Offline',
+      connecting: 'Connecting...',
+      reconnecting: 'Reconnecting...',
+      collaborators: 'collaborators',
+      beta: 'Beta',
+      editName: 'Edit your name',
+      yourName: 'Your name in this room',
+      namePlaceholder: 'How should you appear?',
+      profileHint: 'This name is visible to everyone in this collaboration.',
+      saveName: 'Save name'
     }
   }
 };
