@@ -11,7 +11,7 @@
 [![Gemini API](https://img.shields.io/badge/AI-Gemini_Flash-8E75B2?logo=google&logoColor=white)](https://ai.google.dev/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/bassani)
 
-[Live Demo](https://euclides-web.vercel.app/) • [Technical Documentation (Architecture)](./ARCHITECTURE.md) • [Report Bug](https://github.com/seu-usuario/euclides-web/issues)
+[Live Demo](https://euclides-web.vercel.app/) • [Technical Documentation (Architecture)](./ARCHITECTURE.md) • [Report Bug](https://github.com/DaviBassani/AppClides/issues)
 
 </div>
 
@@ -47,6 +47,7 @@ Unlike purely mathematical software like GeoGebra, Euclides Web incorporates an 
 | **📱 Mobile First** | Responsive interface with multi-touch gesture support (pinch-to-zoom, two-finger pan). |
 | **⚡ Performance** | Built with React 19 and optimized rendering, ensuring 60 FPS even with complex constructions. |
 | **💾 Persistence** | Your theorems and sketches are automatically saved in the browser. |
+| **👥 Multiplayer (Beta)** | Share one workspace by link, edit together, and see collaborator cursors in real time. |
 
 ---
 
@@ -65,8 +66,9 @@ Unlike purely mathematical software like GeoGebra, Euclides Web incorporates an 
 Follow these steps to run the project locally.
 
 ### Prerequisites
-*   **Node.js** 18 or higher.
+*   **Node.js** 22.12 or higher (active LTS).
 *   An API key from [Google AI Studio](https://aistudio.google.com/).
+*   A [Supabase](https://supabase.com/) project for optional multiplayer support.
 
 ### Installation
 
@@ -82,16 +84,24 @@ Follow these steps to run the project locally.
     ```
 
 3.  **Configure Environment:**
-    Create a `.env` file in the project root (or set in terminal):
+    Copy the example and fill in your credentials:
     ```bash
-    export API_KEY="your_google_api_key_here"
+    cp .env.example .env
     ```
+    `GEMINI_API_KEY` is server-only. The Supabase anon key is public by design and must never be replaced with a `service_role` or secret key.
 
 4.  **Run:**
     ```bash
     npm run dev
     ```
-    The app will be available at `http://localhost:5173`.
+    The app will be available at `http://localhost:3000`.
+    For explicit LAN testing, run `DEV_HOST=0.0.0.0 npm run dev`; the default only binds to localhost.
+
+5.  **Validate changes:**
+    ```bash
+    npm run check
+    npm audit --audit-level=high
+    ```
 
 ---
 
@@ -102,7 +112,7 @@ For a deep dive into the architecture (Clean Code, SOLID, Design Patterns), read
 Quick directory summary:
 *   `components/canvas`: SVG rendering components (dumb/presentational).
 *   `hooks/`: Business logic and state management (smart/container).
-*   `services/`: Gemini API integration.
+*   `services/`: Realtime collaboration protocol and Gemini client integration.
 *   `utils/`: Pure math (intersections, analytic geometry).
 
 ---
@@ -116,6 +126,10 @@ Contributions are what make the open-source community such an amazing place to l
 3.  Commit your Changes (`git commit -m 'Add: AmazingFeature'`)
 4.  Push to the Branch (`git push origin feature/AmazingFeature`)
 5.  Open a Pull Request
+
+### Multiplayer Beta Security
+
+Shared-room URLs are bearer capabilities: anyone with the link can edit that board. Do not use the beta for sensitive information. Deployments intended for untrusted public traffic should add Supabase private-channel authorization and distributed rate limiting for `/api/chat` before general availability.
 
 ---
 

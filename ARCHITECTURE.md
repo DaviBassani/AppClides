@@ -9,6 +9,7 @@ This document is intended for developers who wish to understand, maintain, or ex
 *   **Rendering:** SVG Manipulated via React (Virtual DOM). We do not use HTML5 Canvas (bitmap) to maintain infinite scalability and vector sharpness at any zoom level.
 *   **Styling:** Tailwind CSS.
 *   **AI:** Google Gemini API (`@google/genai`) via `flash-preview`.
+*   **Realtime:** Supabase Broadcast and Presence with a validated, rate-bounded protocol.
 *   **Icons:** Lucide React.
 
 ## 2. Architectural Principles
@@ -18,7 +19,7 @@ The code has been restructured to avoid "God Components" (giant components that 
 ### Separation of Concerns (SRP)
 *   **Presentation Layer (View):** Dumb components (`Grid.tsx`, `PointRenderer.tsx`) that only receive props and render SVG. They contain no business logic.
 *   **Logic Layer (Hooks/Controllers):** Custom hooks (`useCanvasInteraction`, `useChat`) that manage state, mouse events, mathematical calculations, and business rules.
-*   **Service Layer (Infra):** External communication (`services/gemini.ts`) and persistence (`utils/storage.ts`).
+*   **Service Layer (Infra):** External communication (`services/gemini.ts`, `services/collab.ts`) and persistence (`utils/storage.ts`).
 
 ---
 
@@ -36,8 +37,10 @@ The code has been restructured to avoid "God Components" (giant components that 
 │   ├── useCanvasInteraction.ts  # The most complex hook (Input, Pan, Zoom, Snap)
 │   ├── useWorkspaces.ts         # Global state management, undo/redo, tabs
 │   └── useChat.ts               # Logic for messages and AI function calls
-├── services/            # External integrations
-│   └── gemini.ts        # Google API Client and Tool Definitions
+├── services/            # External integrations and validated protocols
+│   ├── collab.ts        # Supabase transport, presence, and traffic budgets
+│   ├── collabProtocol.ts # Pure validation, diff, merge, and apply operations
+│   └── gemini.ts        # Browser client for the serverless AI endpoint
 ├── types.ts             # Type Definitions (Shape, Point, Workspace)
 └── utils/               # Pure math functions and helpers
     ├── geometry.ts      # Heavy math (intersections, distances)
@@ -86,9 +89,18 @@ The `useChat` hook intercepts these calls and executes React setters (`setPoints
 
 ### 4.4. State Management and Undo/Redo (`useWorkspaces`)
 We use a manual **Immutability** approach for history.
-*   Every user action creates a *Snapshot* (Deep Copy) of the previous state.
+*   Every user action stores an immutable snapshot of the previous state.
 *   History is stored in memory (runtime) for performance.
 *   Persistence in `LocalStorage` saves only the current state of all workspaces.
+
+### 4.5. Realtime Collaboration
+Each shared workspace owns an opaque room ID. `useWorkspaces` emits explicit local operations; remote operations use a separate apply path and therefore cannot echo back to Supabase.
+
+*   **Presence** carries identity only and updates on join or explicit profile changes.
+*   **Broadcast** carries rate-bounded cursor positions and batched board operations.
+*   **Validation** occurs at the protocol boundary before remote data reaches React state.
+*   **Undo/Redo** rebases remote operations through local history so undo preserves collaborators' work.
+*   **Room links** are bearer capabilities. The beta assumes anyone with the link may edit the room.
 
 ---
 
