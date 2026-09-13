@@ -15,6 +15,7 @@ export interface GeminiFunctionCall {
 export interface ChatMessage {
     role: 'user' | 'assistant';
     text: string;
+    functionCalls?: GeminiFunctionCall[];
 }
 
 export const askEuclides = async (

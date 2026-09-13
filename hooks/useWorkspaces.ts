@@ -210,7 +210,6 @@ export const useWorkspaces = () => {
     updateBoard(current => ({ ...current, texts: resolveStateAction(action, current.texts) }));
   }, [updateBoard]);
 
-
   const clearActiveWorkspace = useCallback(() => {
     const targetId = activeWorkspace.id;
     const currentWorkspace = workspacesRef.current.find(ws => ws.id === targetId) || activeWorkspace;
@@ -356,7 +355,7 @@ export const useWorkspaces = () => {
   return {
     workspaces,
     activeWorkspaceId,
-    activeWorkspace, // Make sure to consume activeWorkspace from the hook to get the fallback
+    activeWorkspace,
     setActiveWorkspaceId,
     addWorkspace,
     removeWorkspace,
@@ -374,7 +373,6 @@ export const useWorkspaces = () => {
     deleteSelection,
     undo,
     redo,
-    // Use targetId to check history availability
     canUndo: (history[activeWorkspace.id]?.past.length || 0) > 0,
     canRedo: (history[activeWorkspace.id]?.future.length || 0) > 0
   };
