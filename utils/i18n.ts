@@ -36,7 +36,7 @@ export const t = {
         ERASER: 'Clique em objetos para apagar'
       },
       support: 'Apoiar o projeto',
-      version: 'Euclides Web v0.3.0'
+      version: 'Euclides Web v0.3.1'
     },
     chat: {
       title: 'O Geômetra',
@@ -67,6 +67,8 @@ export const t = {
       offline: 'Offline',
       connecting: 'Conectando...',
       reconnecting: 'Reconectando...',
+      unavailable: 'Indisponível',
+      unavailableHint: 'Colaboração não configurada neste ambiente.',
       collaborators: 'colaboradores',
       beta: 'Beta',
       editName: 'Editar seu nome',
@@ -105,7 +107,7 @@ export const t = {
         ERASER: 'Click objects to delete'
       },
       support: 'Support the project',
-      version: 'Euclides Web v0.3.0'
+      version: 'Euclides Web v0.3.1'
     },
     chat: {
       title: 'The Geometer',
@@ -136,6 +138,8 @@ export const t = {
       offline: 'Offline',
       connecting: 'Connecting...',
       reconnecting: 'Reconnecting...',
+      unavailable: 'Unavailable',
+      unavailableHint: 'Collaboration is not configured in this environment.',
       collaborators: 'collaborators',
       beta: 'Beta',
       editName: 'Edit your name',

@@ -124,7 +124,7 @@ const ShareBar: React.FC<ShareBarProps> = ({
             <div className="p-1.5" aria-hidden="true">
               {status === 'online' && <Wifi size={14} className="text-emerald-600" />}
               {(status === 'connecting' || status === 'reconnecting') && <Loader2 size={14} className="text-slate-400 animate-spin" />}
-              {status === 'offline' && <WifiOff size={14} className="text-slate-400" />}
+              {(status === 'offline' || status === 'unavailable') && <WifiOff size={14} className={status === 'unavailable' ? 'text-amber-500' : 'text-slate-400'} />}
             </div>
 
             {/* Status text */}
@@ -136,7 +136,8 @@ const ShareBar: React.FC<ShareBarProps> = ({
                 ? `${s.online}${peers.length > 0 ? ` · ${peers.length + 1}` : ''}`
                 : status === 'connecting' ? s.connecting
                   : status === 'reconnecting' ? s.reconnecting
-                    : s.offline}
+                    : status === 'unavailable' ? s.unavailable
+                      : s.offline}
             </span>
 
             <span className="mx-1 px-1.5 py-0.5 rounded-md bg-slate-100 text-[8px] leading-none font-bold uppercase tracking-wider text-slate-400 select-none">
@@ -169,11 +170,12 @@ const ShareBar: React.FC<ShareBarProps> = ({
         ) : (
           <button
             onClick={onStart}
-            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors active:scale-95"
-            title={s.button}
+            disabled={status === 'unavailable'}
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors active:scale-95 disabled:cursor-not-allowed disabled:text-amber-600 disabled:hover:bg-transparent"
+            title={status === 'unavailable' ? s.unavailableHint : s.button}
           >
-            <Share2 size={14} />
-            {s.button}
+            {status === 'unavailable' ? <WifiOff size={14} /> : <Share2 size={14} />}
+            {status === 'unavailable' ? s.unavailable : s.button}
             <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-slate-100 text-[8px] leading-none font-bold uppercase tracking-wider text-slate-400">
               {s.beta}
             </span>

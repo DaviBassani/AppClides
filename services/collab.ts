@@ -15,7 +15,13 @@ import {
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export type CollabStatus = 'connecting' | 'online' | 'reconnecting' | 'offline';
+export type CollabStatus = 'connecting' | 'online' | 'reconnecting' | 'offline' | 'unavailable';
+
+export const hasCollabConfig = (url: unknown, anonKey: unknown) =>
+  typeof url === 'string' && url.trim().length > 0 &&
+  typeof anonKey === 'string' && anonKey.trim().length > 0;
+
+export const isCollabConfigured = () => hasCollabConfig(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export interface PeerPresence {
   id: string;
@@ -127,7 +133,7 @@ const savePeerProfile = (name: string, color: string) => {
 let sharedClient: SupabaseClient | null = null;
 
 const getClient = () => {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  if (!isCollabConfigured()) {
     throw new Error('SUPABASE_URL or SUPABASE_ANON_KEY is missing (import.meta.env.VITE_SUPABASE_*)');
   }
   if (!sharedClient) sharedClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
