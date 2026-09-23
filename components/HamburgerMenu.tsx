@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 
 export interface MenuItem {
   id: string;
@@ -44,35 +44,27 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ items, lang }) => {
 
   return (
     <div ref={rootRef} className="absolute top-4 left-4 z-20" data-hamburger-menu>
-      {/* Single morphing container: closed = hamburger chip, open = item stack */}
+      {/* Single morphing container: closed = square chip, open = full item stack */}
       <div
         className={clsx(
           "flex flex-col rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-lg overflow-hidden transition-all duration-300 ease-out",
-          isOpen ? "w-56 shadow-xl" : "w-fit"
+          isOpen ? "w-56 shadow-xl" : "w-[46px] h-[46px]"
         )}
       >
         <button
           onClick={() => setIsOpen(current => !current)}
           aria-expanded={isOpen}
-          aria-label={lang === 'pt' ? 'Menu' : 'Menu'}
+          aria-label="Menu"
           data-menu-toggle
           className={clsx(
-            "flex items-center rounded-2xl transition-all duration-300 active:scale-95",
+            "flex items-center transition-all duration-300 active:scale-95 shrink-0",
             isOpen
-              ? "justify-end px-3 py-2 border-b border-slate-100 bg-slate-50/90 text-slate-500 hover:text-slate-700 w-full"
-              : "justify-center px-2.5 py-2.5 text-slate-600 hover:bg-slate-50 border-transparent"
+              ? "justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/90 text-slate-500 hover:text-slate-700 w-full"
+              : "justify-center w-[46px] h-[46px] text-slate-600 hover:bg-slate-50 border-transparent"
           )}
         >
-          {/* Icon morphs: hamburger lines when closed, X when open */}
-          {isOpen ? (
-            <X size={16} />
-          ) : (
-            <span className="flex items-center justify-center w-6 h-6 rounded-lg border border-slate-200 bg-white text-slate-600">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                <path d="M2 3.5H12M2 7H12M2 10.5H12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            </span>
-          )}
+          {/* Icon morphs: hamburger lines when closed, X when open — no inner box */}
+          {isOpen ? <X size={16} /> : <Menu size={18} />}
         </button>
 
         {/* Items grow out of the same container; collapsed hides completely */}
