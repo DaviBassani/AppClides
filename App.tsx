@@ -1,17 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Toolbar from './components/Toolbar';
 import Canvas from './components/Canvas';
 import Chat from './components/Chat';
 import TabsBar from './components/TabsBar';
 import ViewControls from './components/ViewControls';
 import ShareBar from './components/ShareBar';
+import HamburgerMenu, { MenuItem } from './components/HamburgerMenu';
 import { ToolType } from './types';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useCollab } from './hooks/useCollab';
-import { EllipsisVertical, X } from 'lucide-react';
+import { Download, EllipsisVertical, FileUp, Image as ImageIcon, X } from 'lucide-react';
 import clsx from 'clsx';
 import { getBrowserLanguage, Language, t } from './utils/i18n';
+import { downloadBlob, downloadEuclidFile, renderBoardToPng } from './utils/boardExport';
+import { parseEuclidFileText } from './utils/euclidFile';
 
 const App: React.FC = () => {
   // Localization State
@@ -29,7 +32,7 @@ const App: React.FC = () => {
   // Custom Hook managing all workspace logic
   const {
     workspaces, activeWorkspaceId, activeWorkspace, setActiveWorkspaceId,
-    addWorkspace, removeWorkspace, renameWorkspace,
+    addWorkspace, addImportedWorkspace, removeWorkspace, renameWorkspace,
     updatePoints, updateShapes, updateTexts, updateBoard, clearActiveWorkspace, deleteSelection,
     setLocalOpsHandler, setWorkspaceRoom, joinRoom,
     applyRemoteOpsToRoom, applyRemoteStateToRoom,
@@ -75,6 +78,61 @@ const App: React.FC = () => {
       setSelectedIds([]);
   };
 
+  // --- Board export / import (hamburger menu) ---
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [exportFeedback, setExportFeedback] = useState<string | null>(null);
+
+  const handleExportImage = useCallback(async () => {
+    const svg = document.querySelector('main svg') as SVGSVGElement | null;
+    if (!svg) return;
+    const result = await renderBoardToPng(svg, activeWorkspace);
+    if (!result) return;
+    downloadBlob(result.blob, result.fileName);
+    setExportFeedback(t[lang].menu.exportImage);
+  }, [activeWorkspace, lang]);
+
+  const handleExportEuclid = useCallback(() => {
+    if (!downloadEuclidFile(activeWorkspace)) return;
+    setExportFeedback(t[lang].menu.exportEuclid);
+  }, [activeWorkspace, lang]);
+
+  const handleImportEuclid = useCallback(() => {
+    importInputRef.current?.click();
+  }, []);
+
+  const handleImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = ''; // allow re-importing the same file
+    if (!file) return;
+    const parsed = parseEuclidFileText(await file.text());
+    if (!parsed) {
+      setExportFeedback(t[lang].menu.importInvalid);
+      return;
+    }
+    // New IDs guarantee zero collision with existing boards; the imported
+    // workspace is fully native: editable, AI-readable, and shareable.
+    addImportedWorkspace({
+      id: crypto.randomUUID(),
+      name: parsed.name,
+      createdAt: parsed.createdAt,
+      roomId: undefined,
+      ...parsed.board
+    });
+    setExportFeedback(`${parsed.name} ✓`);
+  }, [addImportedWorkspace, lang]);
+
+  useEffect(() => {
+    if (!exportFeedback) return;
+    const timer = globalThis.setTimeout(() => setExportFeedback(null), 2200);
+    return () => globalThis.clearTimeout(timer);
+  }, [exportFeedback]);
+
+  const menuItems: MenuItem[] = [
+    { id: 'export-image', label: t[lang].menu.exportImage, icon: () => <ImageIcon size={16} />, action: () => void handleExportImage() },
+    { id: 'export-euclid', label: t[lang].menu.exportEuclid, icon: () => <Download size={16} />, action: handleExportEuclid },
+    { id: 'import-euclid', label: t[lang].menu.importEuclid, icon: () => <FileUp size={16} />, action: handleImportEuclid }
+  ];
+
   const viewControlsProps = {
       snapToGrid,
       setSnapToGrid,
@@ -110,6 +168,25 @@ const App: React.FC = () => {
       />
 
       <div className="flex-1 relative w-full h-full">
+        {/* Board menu: export/import and future entries */}
+        <HamburgerMenu items={menuItems} lang={lang} />
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".euclid,application/x-euclid+json,application/json"
+          onChange={e => void handleImportFile(e)}
+          className="hidden"
+          data-euclid-import-input
+        />
+        {exportFeedback && (
+          <div
+            className="absolute top-16 left-4 z-30 rounded-xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-lg px-3 py-2 text-[12px] font-medium text-slate-600"
+            data-menu-feedback
+          >
+            {exportFeedback}
+          </div>
+        )}
+
         <Toolbar
           selectedTool={selectedTool}
           onSelectTool={setSelectedTool}
