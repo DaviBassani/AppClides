@@ -17,10 +17,10 @@ interface HamburgerMenuProps {
 }
 
 /**
- * Floating morphing menu, top-left corner. The hamburger button itself expands
- * into the item list (one animated container, no nested dropdown) and collapses
- * back on the next click, outside click, or Escape. Items are declarative so
- * new entries can be added without touching the component.
+ * Floating morphing menu, top-left corner. The square chip stays anchored in
+ * place while the panel expands *from behind it*; the toggle icon never moves.
+ * Items fade in place (no slide-from-above), so nothing reads as falling.
+ * Closes on toggle, outside click, or Escape. Items are declarative.
  */
 const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ items, lang }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -44,51 +44,48 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ items, lang }) => {
 
   return (
     <div ref={rootRef} className="absolute top-4 left-4 z-20" data-hamburger-menu>
-      {/* Single morphing container: closed = square chip, open = full item stack */}
+      {/* Anchored toggle: never moves. The panel expands from behind it. */}
+      <button
+        onClick={() => setIsOpen(current => !current)}
+        aria-expanded={isOpen}
+        aria-label="Menu"
+        data-menu-toggle
+        className="relative z-10 flex items-center justify-center w-[46px] h-[46px] rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-lg text-slate-600 hover:bg-slate-50 transition-colors active:scale-95"
+      >
+        {/* Icon crossfades in place: Menu when closed, X when open */}
+        <span className="relative flex items-center justify-center w-[18px] h-[18px]">
+          <Menu
+            size={18}
+            className={clsx(
+              "absolute transition-all duration-200",
+              isOpen ? "opacity-0 rotate-90" : "opacity-100 rotate-0"
+            )}
+          />
+          <X
+            size={18}
+            className={clsx(
+              "absolute transition-all duration-200",
+              isOpen ? "opacity-100 rotate-0" : "opacity-0 -rotate-90"
+            )}
+          />
+        </span>
+      </button>
+
+      {/* Panel expands from the chip's position; items fade in place */}
       <div
         className={clsx(
-          "flex flex-col rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-lg overflow-hidden transition-all duration-300 ease-out",
-          isOpen ? "w-56 shadow-xl" : "w-[46px] h-[46px]"
+          "absolute top-0 left-0 w-56 rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-xl transition-all duration-300 ease-out origin-top-left",
+          isOpen ? "opacity-100 scale-100" : "opacity-0 scale-90 pointer-events-none invisible"
         )}
+        aria-hidden={!isOpen}
+        data-menu-panel
       >
-        <button
-          onClick={() => setIsOpen(current => !current)}
-          aria-expanded={isOpen}
-          aria-label="Menu"
-          data-menu-toggle
-          className={clsx(
-            "flex items-center transition-all duration-300 active:scale-95 shrink-0",
-            isOpen
-              ? "justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/90 text-slate-500 hover:text-slate-700 w-full"
-              : "justify-center w-[46px] h-[46px] text-slate-600 hover:bg-slate-50 border-transparent"
-          )}
-        >
-          {/* Icon crossfades in place: Menu when closed, X when open — no remount */}
-          <span className="relative flex items-center justify-center w-[18px] h-[18px]">
-            <Menu
-              size={18}
-              className={clsx(
-                "absolute transition-all duration-200",
-                isOpen ? "opacity-0 rotate-90" : "opacity-100 rotate-0"
-              )}
-            />
-            <X
-              size={16}
-              className={clsx(
-                "absolute transition-all duration-200",
-                isOpen ? "opacity-100 rotate-0" : "opacity-0 -rotate-90"
-              )}
-            />
-          </span>
-        </button>
-
-        {/* Items grow out of the same container; collapsed hides completely */}
+        <div className="h-[46px]" aria-hidden="true" />
         <div
           className={clsx(
-            "flex flex-col transition-all duration-300 ease-out",
-            isOpen ? "max-h-64 opacity-100" : "max-h-0 opacity-0 invisible pointer-events-none"
+            "flex flex-col pb-1.5 transition-opacity duration-200",
+            isOpen ? "opacity-100" : "opacity-0"
           )}
-          aria-hidden={!isOpen}
           role={isOpen ? 'menu' : undefined}
           data-menu-items
         >
@@ -103,15 +100,13 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ items, lang }) => {
                   setIsOpen(false);
                   item.action();
                 }}
-                style={{
-                  transitionDelay: isOpen ? `${index * 40}ms` : '0ms'
-                }}
+                style={{ transitionDelay: isOpen ? `${120 + index * 40}ms` : '0ms' }}
                 className={clsx(
                   "w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium text-left transition-all duration-200",
                   enabled
                     ? "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     : "text-slate-300 cursor-not-allowed",
-                  isOpen ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
+                  isOpen ? "opacity-100" : "opacity-0"
                 )}
               >
                 {item.icon({ size: 16 })}
