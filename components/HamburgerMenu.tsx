@@ -63,8 +63,23 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ items, lang }) => {
               : "justify-center w-[46px] h-[46px] text-slate-600 hover:bg-slate-50 border-transparent"
           )}
         >
-          {/* Icon morphs: hamburger lines when closed, X when open — no inner box */}
-          {isOpen ? <X size={16} /> : <Menu size={18} />}
+          {/* Icon crossfades in place: Menu when closed, X when open — no remount */}
+          <span className="relative flex items-center justify-center w-[18px] h-[18px]">
+            <Menu
+              size={18}
+              className={clsx(
+                "absolute transition-all duration-200",
+                isOpen ? "opacity-0 rotate-90" : "opacity-100 rotate-0"
+              )}
+            />
+            <X
+              size={16}
+              className={clsx(
+                "absolute transition-all duration-200",
+                isOpen ? "opacity-100 rotate-0" : "opacity-0 -rotate-90"
+              )}
+            />
+          </span>
         </button>
 
         {/* Items grow out of the same container; collapsed hides completely */}
