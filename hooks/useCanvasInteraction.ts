@@ -162,11 +162,15 @@ export const useCanvasInteraction = ({
     }
 
     // Priority 4: Snap to Grid
+    // The grid tile is GRID_SIZE world units wide regardless of zoom, so the
+    // snap radius must be proportional to the tile (half a tile), not fixed in
+    // screen pixels — otherwise the magnet appears to die at high zoom.
     if (snapToGrid) {
+      const gridSnapRadius = GRID_SIZE / 2;
       const gridX = Math.round(x / GRID_SIZE) * GRID_SIZE;
       const gridY = Math.round(y / GRID_SIZE) * GRID_SIZE;
       const dGrid = Math.sqrt(Math.pow(x - gridX, 2) + Math.pow(y - gridY, 2));
-      if (dGrid < effectiveSnapDistance) {
+      if (dGrid < gridSnapRadius) {
          x = gridX;
          y = gridY;
       }
