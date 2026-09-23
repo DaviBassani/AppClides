@@ -133,6 +133,38 @@ const App: React.FC = () => {
     { id: 'import-euclid', label: t[lang].menu.importEuclid, icon: () => <FileUp size={16} />, action: handleImportEuclid }
   ];
 
+  // Keep the ShareBar aligned with the toolbar row on desktop: measure the
+  // toolbar's live position instead of guessing fixed offsets per breakpoint.
+  const [shareBarTop, setShareBarTop] = useState<number | null>(null);
+  useEffect(() => {
+    const update = () => {
+      const md = window.matchMedia('(min-width: 768px)').matches;
+      if (!md) {
+        setShareBarTop(null);
+        return;
+      }
+      const toolbar = document.querySelector('[data-toolbar]');
+      if (!toolbar) return;
+      const toolbarRect = toolbar.getBoundingClientRect();
+      const layer = document.querySelector('[data-ui-layer]');
+      const layerRect = layer?.getBoundingClientRect();
+      // ShareBar is positioned in the same layer as the toolbar (flex-1 relative)
+      const top = layerRect
+        ? toolbarRect.top - layerRect.top
+        : toolbarRect.top;
+      setShareBarTop(top);
+    };
+    update();
+    const resizeObserver = new ResizeObserver(update);
+    const toolbarElement = document.querySelector('[data-toolbar]');
+    if (toolbarElement) resizeObserver.observe(toolbarElement);
+    window.addEventListener('resize', update);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [lang]);
+
   const viewControlsProps = {
       snapToGrid,
       setSnapToGrid,
@@ -167,7 +199,7 @@ const App: React.FC = () => {
         lang={lang}
       />
 
-      <div className="flex-1 relative w-full h-full">
+      <div className="flex-1 relative w-full h-full" data-ui-layer>
         {/* Board menu: export/import and future entries */}
         <HamburgerMenu items={menuItems} lang={lang} />
         <input
@@ -209,6 +241,7 @@ const App: React.FC = () => {
           onCopy={copyShareLink}
           onRename={renamePeer}
           lang={lang}
+          topOffset={shareBarTop}
         />
         {/* DESKTOP Right Toolbar: Static Column */}
         <div className="hidden md:flex absolute bottom-6 right-6 flex-col items-center gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10">
