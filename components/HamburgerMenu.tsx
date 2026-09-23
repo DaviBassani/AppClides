@@ -13,7 +13,8 @@ export interface MenuItem {
 
 interface HamburgerMenuProps {
   items: MenuItem[];
-  lang: string;
+  /** Accessible label for the toggle button (localized). */
+  ariaLabel: string;
 }
 
 /**
@@ -22,7 +23,7 @@ interface HamburgerMenuProps {
  * Items fade in place (no slide-from-above), so nothing reads as falling.
  * Closes on toggle, outside click, or Escape. Items are declarative.
  */
-const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ items, lang }) => {
+const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ items, ariaLabel }) => {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -47,8 +48,8 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ items, lang }) => {
       {/* Anchored toggle: never moves. The panel expands from behind it. */}
       <button
         onClick={() => setIsOpen(current => !current)}
-        aria-expanded={isOpen}
-        aria-label="Menu"
+          aria-expanded={isOpen}
+          aria-label={ariaLabel}
         data-menu-toggle
         className="relative z-10 flex items-center justify-center w-[46px] h-[46px] rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-lg text-slate-600 hover:bg-slate-50 transition-colors active:scale-95"
       >

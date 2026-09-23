@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Toolbar from './components/Toolbar';
 import Canvas from './components/Canvas';
 import Chat from './components/Chat';
@@ -13,8 +13,8 @@ import { useCollab } from './hooks/useCollab';
 import { Download, EllipsisVertical, FileUp, Image as ImageIcon, X } from 'lucide-react';
 import clsx from 'clsx';
 import { getBrowserLanguage, Language, t } from './utils/i18n';
-import { downloadBlob, downloadEuclidFile, renderBoardToPng } from './utils/boardExport';
-import { parseEuclidFileText } from './utils/euclidFile';
+import { useBoardFileTransfer } from './hooks/useBoardFileTransfer';
+import { useElementAlignment } from './hooks/useElementAlignment';
 
 const App: React.FC = () => {
   // Localization State
@@ -79,91 +79,20 @@ const App: React.FC = () => {
   };
 
   // --- Board export / import (hamburger menu) ---
-  const importInputRef = useRef<HTMLInputElement>(null);
-  const [exportFeedback, setExportFeedback] = useState<string | null>(null);
-
-  const handleExportImage = useCallback(async () => {
-    const svg = document.querySelector('main svg') as SVGSVGElement | null;
-    if (!svg) return;
-    const result = await renderBoardToPng(svg, activeWorkspace);
-    if (!result) return;
-    downloadBlob(result.blob, result.fileName);
-    setExportFeedback(t[lang].menu.exportImage);
-  }, [activeWorkspace, lang]);
-
-  const handleExportEuclid = useCallback(() => {
-    if (!downloadEuclidFile(activeWorkspace)) return;
-    setExportFeedback(t[lang].menu.exportEuclid);
-  }, [activeWorkspace, lang]);
-
-  const handleImportEuclid = useCallback(() => {
-    importInputRef.current?.click();
-  }, []);
-
-  const handleImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = ''; // allow re-importing the same file
-    if (!file) return;
-    const parsed = parseEuclidFileText(await file.text());
-    if (!parsed) {
-      setExportFeedback(t[lang].menu.importInvalid);
-      return;
-    }
-    // New IDs guarantee zero collision with existing boards; the imported
-    // workspace is fully native: editable, AI-readable, and shareable.
-    addImportedWorkspace({
-      id: crypto.randomUUID(),
-      name: parsed.name,
-      createdAt: parsed.createdAt,
-      roomId: undefined,
-      ...parsed.board
-    });
-    setExportFeedback(`${parsed.name} ✓`);
-  }, [addImportedWorkspace, lang]);
-
-  useEffect(() => {
-    if (!exportFeedback) return;
-    const timer = globalThis.setTimeout(() => setExportFeedback(null), 2200);
-    return () => globalThis.clearTimeout(timer);
-  }, [exportFeedback]);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const {
+    importInputRef, feedback: transferFeedback,
+    handleExportImage, handleExportEuclid, handleImportEuclid, handleImportFile
+  } = useBoardFileTransfer({ activeWorkspace, addImportedWorkspace, lang });
 
   const menuItems: MenuItem[] = [
-    { id: 'export-image', label: t[lang].menu.exportImage, icon: () => <ImageIcon size={16} />, action: () => void handleExportImage() },
+    { id: 'export-image', label: t[lang].menu.exportImage, icon: () => <ImageIcon size={16} />, action: () => void handleExportImage(svgRef.current) },
     { id: 'export-euclid', label: t[lang].menu.exportEuclid, icon: () => <Download size={16} />, action: handleExportEuclid },
     { id: 'import-euclid', label: t[lang].menu.importEuclid, icon: () => <FileUp size={16} />, action: handleImportEuclid }
   ];
 
-  // Keep the ShareBar aligned with the toolbar row on desktop: measure the
-  // toolbar's live position instead of guessing fixed offsets per breakpoint.
-  const [shareBarTop, setShareBarTop] = useState<number | null>(null);
-  useEffect(() => {
-    const update = () => {
-      const md = window.matchMedia('(min-width: 768px)').matches;
-      if (!md) {
-        setShareBarTop(null);
-        return;
-      }
-      const toolbar = document.querySelector('[data-toolbar]');
-      if (!toolbar) return;
-      const toolbarRect = toolbar.getBoundingClientRect();
-      const layer = document.querySelector('[data-ui-layer]');
-      const layerRect = layer?.getBoundingClientRect();
-      // ShareBar is positioned in the same layer as the toolbar (flex-1 relative)
-      const top = layerRect
-        ? toolbarRect.top - layerRect.top
-        : toolbarRect.top;
-      setShareBarTop(top);
-    };
-    update();
-    const resizeObserver = new ResizeObserver(update);
-    const toolbarElement = document.querySelector('[data-toolbar]');
-    if (toolbarElement) resizeObserver.observe(toolbarElement);
-    window.addEventListener('resize', update);
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener('resize', update);
-    };
-  }, [lang]);
+  // Keep the ShareBar aligned with the toolbar row on desktop (measured live).
+  const shareBarTop = useElementAlignment('[data-toolbar]', '[data-ui-layer]');
 
   const viewControlsProps = {
       snapToGrid,
@@ -201,7 +130,7 @@ const App: React.FC = () => {
 
       <div className="flex-1 relative w-full h-full" data-ui-layer>
         {/* Board menu: export/import and future entries */}
-        <HamburgerMenu items={menuItems} lang={lang} />
+        <HamburgerMenu items={menuItems} ariaLabel={t[lang].menu.label} />
         <input
           ref={importInputRef}
           type="file"
@@ -210,12 +139,12 @@ const App: React.FC = () => {
           className="hidden"
           data-euclid-import-input
         />
-        {exportFeedback && (
+        {transferFeedback && (
           <div
             className="absolute top-16 left-4 z-30 rounded-xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-lg px-3 py-2 text-[12px] font-medium text-slate-600"
             data-menu-feedback
           >
-            {exportFeedback}
+            {transferFeedback}
           </div>
         )}
 
@@ -299,6 +228,7 @@ const App: React.FC = () => {
             // Collaboration
             peers={peers}
             onCursorMove={updateCursor}
+            svgRef={svgRef}
           />
         </main>
       </div>
