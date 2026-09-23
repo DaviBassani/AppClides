@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import Toolbar from './components/Toolbar';
 import Canvas from './components/Canvas';
-import Chat from './components/Chat';
 import TabsBar from './components/TabsBar';
 import ViewControls from './components/ViewControls';
 import ShareBar from './components/ShareBar';
@@ -15,6 +14,10 @@ import clsx from 'clsx';
 import { getBrowserLanguage, Language, t } from './utils/i18n';
 import { useBoardFileTransfer } from './hooks/useBoardFileTransfer';
 import { useElementAlignment } from './hooks/useElementAlignment';
+
+// Chat is loaded lazily so katex, react-markdown and the markdown pipeline
+// stay out of the initial bundle; the chunk is fetched on first open.
+const Chat = lazy(() => import('./components/Chat'));
 
 const App: React.FC = () => {
   // Localization State
@@ -233,13 +236,21 @@ const App: React.FC = () => {
         </main>
       </div>
 
-      <Chat 
-        activeWorkspace={activeWorkspace}
-        updateBoard={updateBoard}
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        lang={lang}
-      />
+      {isChatOpen && (
+        <Suspense
+          fallback={
+            <div className="fixed z-30 bg-white shadow-2xl border-slate-200 md:bottom-6 md:right-24 md:w-96 md:h-[600px] md:rounded-2xl md:border w-full h-[60vh] bottom-0 rounded-t-2xl" />
+          }
+        >
+          <Chat
+            activeWorkspace={activeWorkspace}
+            updateBoard={updateBoard}
+            isOpen={isChatOpen}
+            onClose={() => setIsChatOpen(false)}
+            lang={lang}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };
