@@ -1,4 +1,4 @@
-import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
+import { REALTIME_SUBSCRIBE_STATES, RealtimeChannel, RealtimeClient } from '@supabase/realtime-js';
 import {
   applyBoardOps,
   BoardState,
@@ -16,6 +16,22 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export type CollabStatus = 'connecting' | 'online' | 'reconnecting' | 'offline' | 'unavailable';
+
+// @supabase/realtime-js emits REALTIME_SUBSCRIBE_STATES on the subscribe callback. Map each wire
+// state onto the public CollabStatus contract so hooks/useCollab.ts never learns about the swap.
+const toCollabStatus = (status: REALTIME_SUBSCRIBE_STATES, destroyed: boolean): CollabStatus => {
+  switch (status) {
+    case REALTIME_SUBSCRIBE_STATES.SUBSCRIBED:
+      return 'online';
+    case REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR:
+    case REALTIME_SUBSCRIBE_STATES.TIMED_OUT:
+      return 'reconnecting';
+    case REALTIME_SUBSCRIBE_STATES.CLOSED:
+      return destroyed ? 'offline' : 'reconnecting';
+    default:
+      return 'reconnecting';
+  }
+};
 
 export const hasCollabConfig = (url: unknown, anonKey: unknown) =>
   typeof url === 'string' && url.trim().length > 0 &&
@@ -130,13 +146,22 @@ const savePeerProfile = (name: string, color: string) => {
   }
 };
 
-let sharedClient: SupabaseClient | null = null;
+let sharedClient: RealtimeClient | null = null;
 
 const getClient = () => {
   if (!isCollabConfigured()) {
     throw new Error('SUPABASE_URL or SUPABASE_ANON_KEY is missing (import.meta.env.VITE_SUPABASE_*)');
   }
-  if (!sharedClient) sharedClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  if (!sharedClient) {
+    // Mirrors supabase-js: <project>/realtime/v1 over ws(s), anon key in the query params.
+    const endpoint = new URL('realtime/v1', SUPABASE_URL);
+    endpoint.protocol = endpoint.protocol.replace(/^http/, 'ws');
+    const client = new RealtimeClient(endpoint.href, {
+      params: { apikey: SUPABASE_ANON_KEY }
+    });
+    client.connect();
+    sharedClient = client;
+  }
   return sharedClient;
 };
 
@@ -160,7 +185,7 @@ export class CollabSession {
   private static readonly OPS_BATCH_MS = 100;
   private static readonly roomCleanup = new Map<string, Promise<unknown>>();
 
-  private client: SupabaseClient;
+  private client: RealtimeClient;
   private channel: RealtimeChannel | null = null;
   private status: CollabStatus = 'connecting';
   private destroyed = false;
@@ -183,7 +208,7 @@ export class CollabSession {
   private stateRequestAttempts = 0;
   private requestInitialState: boolean;
 
-  constructor(roomId: string, events: CollabEvents, client?: SupabaseClient, options: CollabSessionOptions = {}) {
+  constructor(roomId: string, events: CollabEvents, client?: RealtimeClient, options: CollabSessionOptions = {}) {
     if (!isSafeRoomId(roomId)) throw new Error('Invalid collaboration room ID');
     this.roomId = roomId;
     this.events = events;
@@ -254,7 +279,7 @@ export class CollabSession {
       .on('presence', { event: 'sync' }, () => this.syncPresence(channel))
       .subscribe(async status => {
         if (this.destroyed || channel !== this.channel) return;
-        if (status === 'SUBSCRIBED') {
+        if (status === REALTIME_SUBSCRIBE_STATES.SUBSCRIBED) {
           this.setStatus('online');
           await channel.track({ id: this.peerId, name: this.peerName, color: this.peerColor });
           if (this.destroyed || channel !== this.channel) return;
@@ -262,10 +287,10 @@ export class CollabSession {
           this.requestInitialState = true;
           this.flushOps();
           this.flushCursor();
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        } else if (status === REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR || status === REALTIME_SUBSCRIBE_STATES.TIMED_OUT) {
           // realtime-js owns reconnect/backoff; creating another channel here duplicates traffic.
           this.setStatus('reconnecting');
-        } else if (status === 'CLOSED') {
+        } else if (status === REALTIME_SUBSCRIBE_STATES.CLOSED) {
           this.setStatus(this.destroyed ? 'offline' : 'reconnecting');
         }
       });
