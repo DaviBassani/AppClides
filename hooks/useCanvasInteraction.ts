@@ -108,7 +108,20 @@ export const useCanvasInteraction = ({
     let snappedId: string | null = null;
     let shapeId: string | null = null;
     let textId: string | null = null;
-    
+
+    // When dragging an existing point with the magnet on, the grid outranks
+    // shape/intersection snaps: the figure's own lines follow the dragged point
+    // and would otherwise capture the cursor everywhere, making the grid
+    // unreachable. Point snaps still win (so the point can re-attach).
+    const draggingPoint = draggingId !== null && !!points[draggingId];
+    if (draggingPoint && snapToGrid) {
+      const gridX = Math.round(x / GRID_SIZE) * GRID_SIZE;
+      const gridY = Math.round(y / GRID_SIZE) * GRID_SIZE;
+      x = gridX;
+      y = gridY;
+      return { x, y, snappedId: null, shapeId: null, textId: null, isIntersection: false };
+    }
+
     // Priority 1: Snap to Points
     const nearestPointId = findNearestPoint(x, y, points, excludePointId, effectiveSnapDistance);
     
