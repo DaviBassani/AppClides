@@ -71,11 +71,11 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ items, lang }) => {
         </span>
       </button>
 
-      {/* Panel expands from the chip's position; items fade in place */}
+      {/* Panel expands rightward from the chip's left edge; items fade in place */}
       <div
         className={clsx(
           "absolute top-0 left-0 w-56 rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-xl transition-all duration-300 ease-out origin-top-left",
-          isOpen ? "opacity-100 scale-100" : "opacity-0 scale-90 pointer-events-none invisible"
+          isOpen ? "opacity-100 scale-x-100 scale-y-100" : "opacity-0 scale-x-[0.205] scale-y-[0.826] pointer-events-none invisible"
         )}
         aria-hidden={!isOpen}
         data-menu-panel
