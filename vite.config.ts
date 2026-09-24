@@ -19,6 +19,19 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        rollupOptions: {
+          output: {
+            // Stable vendor chunks: app changes never invalidate vendor cache.
+            // katex/chat stay out of this map so the lazy import keeps its own chunk.
+            manualChunks(id: string) {
+              if (!id.includes('node_modules')) return undefined;
+              if (id.includes('lucide-react')) return 'icons';
+              return 'vendor';
+            }
+          }
+        }
       }
     };
 });

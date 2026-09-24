@@ -106,10 +106,17 @@ Each shared workspace owns an opaque room ID. `useWorkspaces` emits explicit loc
 
 ## 5. Canvas Rendering Flow
 
-To ensure high performance (60fps) even with many elements:
-1.  **Grid:** Rendered via SVG `pattern` (much lighter than thousands of individual lines). Line thickness is recalculated inversely to zoom to maintain a hairline width (`visualScale`).
-2.  **Memoization:** Components like `Grid`, `ShapeRenderer`, and `PointRenderer` are wrapped in `React.memo` to avoid unnecessary re-renders when only the mouse moves (but geometry doesn't change).
 3.  **Ghost Rendering:** The "draft" of what is being drawn is rendered separately, avoiding recreating objects in the main list until the action is finalized.
+
+### 5.1. Bundle & Performance Policy
+
+The initial payload is budgeted: only what the first paint needs ships eagerly.
+
+*   **`index` chunk (~78 KB)** — app code that renders the board shell.
+*   **`vendor` chunk (~656 KB)** — stable third-party code (react-dom, realtime client). Changes to app code never invalidate its cache (`manualChunks` in `vite.config.ts`).
+*   **`Chat` chunk (~408 KB incl. KaTeX + markdown pipeline)** — loaded on first open via `React.lazy` + `Suspense`, with a same-shape placeholder to avoid layout shift.
+*   **Realtime transport** uses `@supabase/realtime-js` directly; the heavier `@supabase/supabase-js` facade (auth/storage/postgrest, ~700 KB of dead code for this app) is not bundled.
+*   **Rule of thumb:** a feature that is not visible on the first paint must be a lazy chunk. Measure with `npm run build` and the bundle visualizer before adding a dependency.
 
 ---
 

@@ -59,6 +59,13 @@ export const t = {
       new: 'Nova Demonstração',
       untitled: 'Sem Título'
     },
+    menu: {
+      label: 'Menu',
+      exportImage: 'Exportar como imagem',
+      exportEuclid: 'Exportar quadro (.euclid)',
+      importEuclid: 'Importar quadro (.euclid)',
+      importInvalid: 'Arquivo inválido'
+    },
     share: {
       button: 'Compartilhar',
       stop: 'Encerrar compartilhamento',
@@ -129,6 +136,13 @@ export const t = {
     tabs: {
       new: 'New Demonstration',
       untitled: 'Untitled'
+    },
+    menu: {
+      label: 'Menu',
+      exportImage: 'Export as image',
+      exportEuclid: 'Export board (.euclid)',
+      importEuclid: 'Import board (.euclid)',
+      importInvalid: 'Invalid file'
     },
     share: {
       button: 'Share',

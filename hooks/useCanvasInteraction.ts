@@ -108,7 +108,20 @@ export const useCanvasInteraction = ({
     let snappedId: string | null = null;
     let shapeId: string | null = null;
     let textId: string | null = null;
-    
+
+    // When dragging an existing point with the magnet on, the grid outranks
+    // shape/intersection snaps: the figure's own lines follow the dragged point
+    // and would otherwise capture the cursor everywhere, making the grid
+    // unreachable. Point snaps still win (so the point can re-attach).
+    const draggingPoint = draggingId !== null && !!points[draggingId];
+    if (draggingPoint && snapToGrid) {
+      const gridX = Math.round(x / GRID_SIZE) * GRID_SIZE;
+      const gridY = Math.round(y / GRID_SIZE) * GRID_SIZE;
+      x = gridX;
+      y = gridY;
+      return { x, y, snappedId: null, shapeId: null, textId: null, isIntersection: false };
+    }
+
     // Priority 1: Snap to Points
     const nearestPointId = findNearestPoint(x, y, points, excludePointId, effectiveSnapDistance);
     
@@ -162,11 +175,15 @@ export const useCanvasInteraction = ({
     }
 
     // Priority 4: Snap to Grid
+    // The grid tile is GRID_SIZE world units wide regardless of zoom, so the
+    // snap radius must be proportional to the tile (half a tile), not fixed in
+    // screen pixels — otherwise the magnet appears to die at high zoom.
     if (snapToGrid) {
+      const gridSnapRadius = GRID_SIZE / 2;
       const gridX = Math.round(x / GRID_SIZE) * GRID_SIZE;
       const gridY = Math.round(y / GRID_SIZE) * GRID_SIZE;
       const dGrid = Math.sqrt(Math.pow(x - gridX, 2) + Math.pow(y - gridY, 2));
-      if (dGrid < effectiveSnapDistance) {
+      if (dGrid < gridSnapRadius) {
          x = gridX;
          y = gridY;
       }

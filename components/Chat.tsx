@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { BoardState, Workspace } from '../types';
 import { useChat } from '../hooks/useChat';
 import { Language, t } from '../utils/i18n';

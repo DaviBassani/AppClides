@@ -31,6 +31,8 @@ interface CanvasProps {
   setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
   peers?: PeerPresence[];
   onCursorMove?: (cursor: { x: number; y: number } | null) => void;
+  /** Receives the live SVG element for features like PNG export. */
+  svgRef?: React.MutableRefObject<SVGSVGElement | null>;
 }
 
 const Canvas: React.FC<CanvasProps> = ({
@@ -49,9 +51,10 @@ const Canvas: React.FC<CanvasProps> = ({
   lang,
   selectedIds,
   setSelectedIds,
-  peers = [],
-  onCursorMove
-}) => {
+   peers = [],
+   onCursorMove,
+   svgRef
+ }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
@@ -170,7 +173,7 @@ const Canvas: React.FC<CanvasProps> = ({
          // Deselect logic handled mostly in interaction hook, but safety check here
       }}
     >
-      <svg className="w-full h-full pointer-events-none">
+      <svg ref={svgRef} className="w-full h-full pointer-events-none">
         
         <g transform={`translate(${view.x}, ${view.y}) scale(${view.k})`}>
             {/* Grid */}

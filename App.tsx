@@ -1,17 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import Toolbar from './components/Toolbar';
 import Canvas from './components/Canvas';
-import Chat from './components/Chat';
 import TabsBar from './components/TabsBar';
 import ViewControls from './components/ViewControls';
 import ShareBar from './components/ShareBar';
+import HamburgerMenu, { MenuItem } from './components/HamburgerMenu';
 import { ToolType } from './types';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useCollab } from './hooks/useCollab';
-import { EllipsisVertical, X } from 'lucide-react';
+import { Download, EllipsisVertical, FileUp, Image as ImageIcon, X } from 'lucide-react';
 import clsx from 'clsx';
 import { getBrowserLanguage, Language, t } from './utils/i18n';
+import { useBoardFileTransfer } from './hooks/useBoardFileTransfer';
+import { useElementAlignment } from './hooks/useElementAlignment';
+
+// Chat is loaded lazily so katex, react-markdown and the markdown pipeline
+// stay out of the initial bundle; the chunk is fetched on first open.
+const Chat = lazy(() => import('./components/Chat'));
 
 const App: React.FC = () => {
   // Localization State
@@ -29,7 +35,7 @@ const App: React.FC = () => {
   // Custom Hook managing all workspace logic
   const {
     workspaces, activeWorkspaceId, activeWorkspace, setActiveWorkspaceId,
-    addWorkspace, removeWorkspace, renameWorkspace,
+    addWorkspace, addImportedWorkspace, removeWorkspace, renameWorkspace,
     updatePoints, updateShapes, updateTexts, updateBoard, clearActiveWorkspace, deleteSelection,
     setLocalOpsHandler, setWorkspaceRoom, joinRoom,
     applyRemoteOpsToRoom, applyRemoteStateToRoom,
@@ -75,6 +81,22 @@ const App: React.FC = () => {
       setSelectedIds([]);
   };
 
+  // --- Board export / import (hamburger menu) ---
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const {
+    importInputRef, feedback: transferFeedback,
+    handleExportImage, handleExportEuclid, handleImportEuclid, handleImportFile
+  } = useBoardFileTransfer({ activeWorkspace, addImportedWorkspace, lang });
+
+  const menuItems: MenuItem[] = [
+    { id: 'export-image', label: t[lang].menu.exportImage, icon: () => <ImageIcon size={16} />, action: () => void handleExportImage(svgRef.current) },
+    { id: 'export-euclid', label: t[lang].menu.exportEuclid, icon: () => <Download size={16} />, action: handleExportEuclid },
+    { id: 'import-euclid', label: t[lang].menu.importEuclid, icon: () => <FileUp size={16} />, action: handleImportEuclid }
+  ];
+
+  // Keep the ShareBar aligned with the toolbar row on desktop (measured live).
+  const shareBarTop = useElementAlignment('[data-toolbar]', '[data-ui-layer]');
+
   const viewControlsProps = {
       snapToGrid,
       setSnapToGrid,
@@ -109,7 +131,26 @@ const App: React.FC = () => {
         lang={lang}
       />
 
-      <div className="flex-1 relative w-full h-full">
+      <div className="flex-1 relative w-full h-full" data-ui-layer>
+        {/* Board menu: export/import and future entries */}
+        <HamburgerMenu items={menuItems} ariaLabel={t[lang].menu.label} />
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".euclid,application/x-euclid+json,application/json"
+          onChange={e => void handleImportFile(e)}
+          className="hidden"
+          data-euclid-import-input
+        />
+        {transferFeedback && (
+          <div
+            className="absolute top-16 left-4 z-30 rounded-xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-lg px-3 py-2 text-[12px] font-medium text-slate-600"
+            data-menu-feedback
+          >
+            {transferFeedback}
+          </div>
+        )}
+
         <Toolbar
           selectedTool={selectedTool}
           onSelectTool={setSelectedTool}
@@ -132,6 +173,7 @@ const App: React.FC = () => {
           onCopy={copyShareLink}
           onRename={renamePeer}
           lang={lang}
+          topOffset={shareBarTop}
         />
         {/* DESKTOP Right Toolbar: Static Column */}
         <div className="hidden md:flex absolute bottom-6 right-6 flex-col items-center gap-2 bg-white/90 backdrop-blur shadow-lg rounded-xl p-1.5 border border-slate-200 z-10">
@@ -189,17 +231,26 @@ const App: React.FC = () => {
             // Collaboration
             peers={peers}
             onCursorMove={updateCursor}
+            svgRef={svgRef}
           />
         </main>
       </div>
 
-      <Chat 
-        activeWorkspace={activeWorkspace}
-        updateBoard={updateBoard}
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        lang={lang}
-      />
+      {isChatOpen && (
+        <Suspense
+          fallback={
+            <div className="fixed z-30 bg-white shadow-2xl border-slate-200 md:bottom-6 md:right-24 md:w-96 md:h-[600px] md:rounded-2xl md:border w-full h-[60vh] bottom-0 rounded-t-2xl" />
+          }
+        >
+          <Chat
+            activeWorkspace={activeWorkspace}
+            updateBoard={updateBoard}
+            isOpen={isChatOpen}
+            onClose={() => setIsChatOpen(false)}
+            lang={lang}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

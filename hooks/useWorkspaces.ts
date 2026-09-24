@@ -272,6 +272,12 @@ export const useWorkspaces = () => {
     setActiveWorkspaceId(newWs.id);
   }, [workspaces.length]);
 
+  /** Imports a complete workspace (e.g., from a .euclid file) and activates it. */
+  const addImportedWorkspace = useCallback((workspace: Workspace) => {
+    setWorkspaces(prev => [...prev, workspace]);
+    setActiveWorkspaceId(workspace.id);
+  }, []);
+
   const removeWorkspace = useCallback((id: string) => {
     if (workspaces.length <= 1) return;
     
@@ -358,6 +364,7 @@ export const useWorkspaces = () => {
     activeWorkspace,
     setActiveWorkspaceId,
     addWorkspace,
+    addImportedWorkspace,
     removeWorkspace,
     renameWorkspace,
     updatePoints,

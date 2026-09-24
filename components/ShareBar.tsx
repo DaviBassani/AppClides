@@ -15,10 +15,12 @@ interface ShareBarProps {
   onCopy: () => void;
   onRename: (name: string) => void | Promise<void>;
   lang: Language;
+  /** Desktop-only top offset (px), measured from the live toolbar position. */
+  topOffset?: number | null;
 }
 
 const ShareBar: React.FC<ShareBarProps> = ({
-  isSharing, status, peers, localPeer, onStart, onStop, onCopy, onRename, lang
+  isSharing, status, peers, localPeer, onStart, onStop, onCopy, onRename, lang, topOffset
 }) => {
   const [copied, setCopied] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -73,7 +75,12 @@ const ShareBar: React.FC<ShareBarProps> = ({
   };
 
   return (
-    <div ref={rootRef} className="absolute top-4 md:top-20 xl:top-4 right-4 z-20">
+    <div
+      ref={rootRef}
+      className="absolute top-[76px] xl:top-4 right-4 z-20 transition-[top] duration-300"
+      style={topOffset !== null && topOffset !== undefined ? { top: topOffset } : undefined}
+      data-share-bar
+    >
       <div
         className={clsx(
           "flex items-center gap-1 rounded-xl shadow-lg border backdrop-blur-md p-1 transition-all",
