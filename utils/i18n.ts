@@ -36,7 +36,7 @@ export const t = {
         ERASER: 'Clique em objetos para apagar'
       },
       support: 'Apoiar o projeto',
-      version: 'Euclides Web v0.3.1'
+      version: 'Euclides Web v0.4.0'
     },
     chat: {
       title: 'O Geômetra',
@@ -114,7 +114,7 @@ export const t = {
         ERASER: 'Click objects to delete'
       },
       support: 'Support the project',
-      version: 'Euclides Web v0.3.1'
+      version: 'Euclides Web v0.4.0'
     },
     chat: {
       title: 'The Geometer',
